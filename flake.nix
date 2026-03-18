@@ -127,6 +127,17 @@
               ${pkgs.dioxus-cli}/bin/dx build --platform web --release
             ''}/bin/build-web";
           };
+
+          build-linux = {
+            type = "app";
+            program = "${pkgs.writeShellScriptBin "build-linux" ''
+              export PATH="${rustStable}/bin:$PATH"
+              export BEVY_ASSET_ROOT="."
+              export LD_LIBRARY_PATH="${libPath}:$LD_LIBRARY_PATH"
+              ${pkgs.dioxus-cli}/bin/dx build --release
+            ''}/bin/build-linux";
+          };
+
         };
 
       }
