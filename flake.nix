@@ -138,6 +138,15 @@
             ''}/bin/build-linux";
           };
 
+          build-windows = {
+            type = "app";
+            program = "${pkgs.writeShellScriptBin "build-windows" ''
+              export PATH="${rustStable}/bin:$PATH"
+              export BEVY_ASSET_ROOT="."
+              export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc"
+              ${rustStable}/bin/cargo build --release --target x86_64-pc-windows-gnu
+            ''}/bin/build-windows";
+          };
         };
 
       }
