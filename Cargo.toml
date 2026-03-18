@@ -1,0 +1,18 @@
+[package]
+name = "emf-mmf"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+hotpatching = ["bevy/dynamic_linking"]
+
+[dependencies]
+bevy = "0.18.1"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
