@@ -2,7 +2,8 @@
 codegen-backend = true
 
 [profile.dev]
-codegen-backend = "cranelift"
+# codegen-backend = "cranelift"
+codegen-backend = "llvm"
 
 [profile.dev.package."*"]
 codegen-backend = "llvm"
