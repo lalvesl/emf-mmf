@@ -113,7 +113,8 @@
           web = {
             type = "app";
             program = "${pkgs.writeShellScriptBin "run-web" ''
-              export BEVY_ASSET_ROOT="."
+              export CARGO_PROFILE_DEV_CODEGEN_BACKEND="llvm"
+              export BEVY_ASSET_ROOT="./src"
               export LD_LIBRARY_PATH="${libPath}:$LD_LIBRARY_PATH"
               ${pkgs.dioxus-cli}/bin/dx serve --platform web
             ''}/bin/run-web";
