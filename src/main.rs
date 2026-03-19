@@ -1,48 +1,66 @@
+mod camera;
+mod config;
+mod stator;
+mod ui;
+mod winding;
+
 use bevy::prelude::*;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "EMF-MMF — Stator Winding Simulator".into(),
+                ..default()
+            }),
+            ..default()
+        }))
+        .add_plugins(ui::UiPlugin)
+        .init_resource::<config::MotorConfig>()
         .add_systems(Startup, setup)
-        .add_systems(Update, rotate)
+        .add_systems(
+            Update,
+            (
+                camera::orbit_camera,
+                stator::regenerate_stator,
+                winding::regenerate_winding,
+            ),
+        )
         .run();
 }
 
-#[derive(Component)]
-struct Rotator;
+fn setup(mut commands: Commands) {
+    // Ambient light
+    commands.insert_resource(AmbientLight {
+        color: Color::WHITE,
+        brightness: 300.0,
+    });
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    // 3D Cube
+    // Directional light
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::srgb(0.2, 0.8, 0.4))),
-        Transform::from_xyz(0.0, 0.5, 0.0),
-        Rotator,
+        DirectionalLight {
+            shadows_enabled: true,
+            illuminance: 8000.0,
+            ..default()
+        },
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.6, 0.4, 0.0)),
     ));
 
-    // Light
+    // Point light
     commands.spawn((
         PointLight {
             shadows_enabled: true,
-            intensity: 1500.0,
+            intensity: 4_000_000.0,
+            range: 30.0,
             ..default()
         },
-        Transform::from_xyz(4.0, 8.0, 4.0),
+        Transform::from_xyz(5.0, 8.0, 5.0),
     ));
 
-    // 3D Camera
+    // Camera with orbit controller
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Dir3::Y),
+        Transform::from_xyz(5.0, 5.0, 8.0).looking_at(Vec3::ZERO, Dir3::Y),
+        camera::OrbitCamera::default(),
     ));
-}
-
-fn rotate(time: Res<Time>, mut query: Query<&mut Transform, With<Rotator>>) {
-    for mut transform in &mut query {
-        transform.rotate_y(time.delta_secs());
-    }
 }
