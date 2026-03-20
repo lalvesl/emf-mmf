@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, EguiPlugin, egui};
+use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 
 use crate::config::MotorConfig;
 
@@ -8,7 +8,7 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(EguiPlugin::default())
-            .add_systems(Update, ui_panel);
+            .add_systems(EguiPrimaryContextPass, ui_panel);
     }
 }
 
