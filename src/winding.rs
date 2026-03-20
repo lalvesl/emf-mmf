@@ -178,7 +178,7 @@ fn spawn_endwinding_arc(
     material: Handle<StandardMaterial>,
     from_slot: usize,
     to_slot: usize,
-    total_slots: usize,
+    _total_slots: usize,
     y_base: f32,
     y_offset: f32,
     tooth_angle: f32,
