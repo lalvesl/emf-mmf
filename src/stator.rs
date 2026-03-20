@@ -1,6 +1,7 @@
 use bevy::asset::RenderAssetUsages;
+use bevy::mesh::Indices;
 use bevy::prelude::*;
-use bevy::render::mesh::{Indices, wgpu_types::PrimitiveTopology};
+use bevy::render::render_resource::PrimitiveTopology;
 use std::f32::consts::TAU;
 
 use crate::config::*;
