@@ -1,4 +1,3 @@
-use bevy::ecs::event::EventReader;
 use bevy::input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 
@@ -24,8 +23,8 @@ impl Default for OrbitCamera {
 pub fn orbit_camera(
     mut query: Query<(&mut Transform, &mut OrbitCamera)>,
     mouse_button: Res<ButtonInput<MouseButton>>,
-    mut mouse_motion: EventReader<MouseMotion>,
-    mut scroll: EventReader<MouseWheel>,
+    mut mouse_motion: MessageReader<MouseMotion>,
+    mut scroll: MessageReader<MouseWheel>,
 ) {
     let Ok((mut transform, mut orbit)) = query.single_mut() else {
         return;
