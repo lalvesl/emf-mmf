@@ -31,9 +31,10 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     // Ambient light
-    commands.insert_resource(AmbientLight {
+    commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
         brightness: 300.0,
+        ..default()
     });
 
     // Directional light
