@@ -25,7 +25,7 @@ pub fn compute_winding(config: &MotorConfig) -> Vec<Option<SlotAssignment>> {
     let p = config.pole_pairs;
 
     // Configuration must be valid: n divisible by (2 * p * m)
-    if m == 0 || p == 0 || n < 2 * p * m || n % (2 * p * m) != 0 {
+    if m == 0 || p == 0 || n < 2 * p * m || !n.is_multiple_of(2 * p * m) {
         return vec![None; n];
     }
 

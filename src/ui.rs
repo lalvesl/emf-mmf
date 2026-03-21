@@ -83,7 +83,7 @@ fn ui_panel(mut contexts: EguiContexts, mut config: ResMut<MotorConfig>) {
             let n = config.groove_count;
             let m = config.phases;
             let p = config.pole_pairs;
-            let valid = m > 0 && p > 0 && n >= 2 * p * m && n % (2 * p * m) == 0;
+            let valid = m > 0 && p > 0 && n >= 2 * p * m && n.is_multiple_of(2 * p * m);
 
             if valid {
                 let q = n / (2 * p * m);
@@ -110,7 +110,7 @@ fn ui_panel(mut contexts: EguiContexts, mut config: ResMut<MotorConfig>) {
 /// Ensure groove_count stays divisible by 2 * pole_pairs * phases.
 fn clamp_config(config: &mut MotorConfig) {
     let divisor = 2 * config.pole_pairs * config.phases;
-    if divisor > 0 && config.groove_count % divisor != 0 {
+    if divisor > 0 && !config.groove_count.is_multiple_of(divisor) {
         // Snap to nearest valid value
         config.groove_count = ((config.groove_count + divisor / 2) / divisor) * divisor;
         config.groove_count = config.groove_count.max(divisor).min(72);
