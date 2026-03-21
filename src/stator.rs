@@ -71,6 +71,87 @@ pub fn regenerate_stator(
 // Mesh generation helpers
 // ---------------------------------------------------------------------------
 
+macro_rules! add_cylinder_wall {
+    ($pos:expr, $nor:expr, $uvs:expr, $idx:expr, $radius:expr, $y_bot:expr, $y_top:expr, $a_start:expr, $a_end:expr, $segments:expr, $outward:expr) => {{
+        let base = $pos.len() as u32;
+        for i in 0..=$segments {
+            let t = i as f32 / $segments as f32;
+            let a = $a_start + t * ($a_end - $a_start);
+            let (c, s) = (a.cos(), a.sin());
+            let n_dir = if $outward { 1.0 } else { -1.0 };
+            $pos.push([$radius * c, $y_bot, $radius * s]);
+            $nor.push([n_dir * c, 0.0, n_dir * s]);
+            $uvs.push([t, 0.0]);
+            $pos.push([$radius * c, $y_top, $radius * s]);
+            $nor.push([n_dir * c, 0.0, n_dir * s]);
+            $uvs.push([t, 1.0]);
+        }
+        for i in 0..$segments {
+            let b = base + (i as u32) * 2;
+            if $outward {
+                $idx.extend_from_slice(&[b, b + 1, b + 3, b, b + 3, b + 2]);
+            } else {
+                $idx.extend_from_slice(&[b, b + 3, b + 1, b, b + 2, b + 3]);
+            }
+        }
+    }};
+}
+
+macro_rules! add_annulus_cap {
+    ($pos:expr, $nor:expr, $uvs:expr, $idx:expr, $r_inner:expr, $r_outer:expr, $y:expr, $a_start:expr, $a_end:expr, $segments:expr, $top:expr) => {{
+        let base = $pos.len() as u32;
+        let ny = if $top { 1.0 } else { -1.0 };
+        for i in 0..=$segments {
+            let t = i as f32 / $segments as f32;
+            let a = $a_start + t * ($a_end - $a_start);
+            let (c, s) = (a.cos(), a.sin());
+            $pos.push([$r_outer * c, $y, $r_outer * s]);
+            $nor.push([0.0, ny, 0.0]);
+            $uvs.push([t, 1.0]);
+            $pos.push([$r_inner * c, $y, $r_inner * s]);
+            $nor.push([0.0, ny, 0.0]);
+            $uvs.push([t, 0.0]);
+        }
+        for i in 0..$segments {
+            let b = base + (i as u32) * 2;
+            if $top {
+                $idx.extend_from_slice(&[b, b + 1, b + 3, b, b + 3, b + 2]);
+            } else {
+                $idx.extend_from_slice(&[b, b + 3, b + 1, b, b + 2, b + 3]);
+            }
+        }
+    }};
+}
+
+macro_rules! add_radial_wall {
+    ($pos:expr, $nor:expr, $uvs:expr, $idx:expr, $r_inner:expr, $r_outer:expr, $y_bot:expr, $y_top:expr, $angle:expr, $left_side:expr) => {{
+        let base = $pos.len() as u32;
+        let (c, s) = ($angle.cos(), $angle.sin());
+        let n_dir = if $left_side { -1.0 } else { 1.0 };
+        let nx = n_dir * (-s);
+        let nz = n_dir * c;
+
+        $pos.push([$r_inner * c, $y_bot, $r_inner * s]);
+        $nor.push([nx, 0.0, nz]);
+        $uvs.push([0.0, 0.0]);
+        $pos.push([$r_inner * c, $y_top, $r_inner * s]);
+        $nor.push([nx, 0.0, nz]);
+        $uvs.push([0.0, 1.0]);
+        $pos.push([$r_outer * c, $y_bot, $r_outer * s]);
+        $nor.push([nx, 0.0, nz]);
+        $uvs.push([1.0, 0.0]);
+        $pos.push([$r_outer * c, $y_top, $r_outer * s]);
+        $nor.push([nx, 0.0, nz]);
+        $uvs.push([1.0, 1.0]);
+
+        if $left_side {
+            $idx.extend_from_slice(&[base, base + 1, base + 3, base, base + 3, base + 2]);
+        } else {
+            $idx.extend_from_slice(&[base, base + 3, base + 1, base, base + 2, base + 3]);
+        }
+    }};
+}
+
 /// Generate a full ring (annulus) mesh extruded along Y.
 fn generate_ring_mesh(r_inner: f32, r_outer: f32, y_bot: f32, y_top: f32, segments: usize) -> Mesh {
     let mut pos: Vec<[f32; 3]> = Vec::new();
@@ -79,20 +160,20 @@ fn generate_ring_mesh(r_inner: f32, r_outer: f32, y_bot: f32, y_top: f32, segmen
     let mut idx: Vec<u32> = Vec::new();
 
     // -- Outer wall --
-    add_cylinder_wall(
-        &mut pos, &mut nor, &mut uvs, &mut idx, r_outer, y_bot, y_top, 0.0, TAU, segments, true,
+    add_cylinder_wall!(
+        pos, nor, uvs, idx, r_outer, y_bot, y_top, 0.0, TAU, segments, true
     );
     // -- Inner wall --
-    add_cylinder_wall(
-        &mut pos, &mut nor, &mut uvs, &mut idx, r_inner, y_bot, y_top, 0.0, TAU, segments, false,
+    add_cylinder_wall!(
+        pos, nor, uvs, idx, r_inner, y_bot, y_top, 0.0, TAU, segments, false
     );
     // -- Top cap --
-    add_annulus_cap(
-        &mut pos, &mut nor, &mut uvs, &mut idx, r_inner, r_outer, y_top, 0.0, TAU, segments, true,
+    add_annulus_cap!(
+        pos, nor, uvs, idx, r_inner, r_outer, y_top, 0.0, TAU, segments, true
     );
     // -- Bottom cap --
-    add_annulus_cap(
-        &mut pos, &mut nor, &mut uvs, &mut idx, r_inner, r_outer, y_bot, 0.0, TAU, segments, false,
+    add_annulus_cap!(
+        pos, nor, uvs, idx, r_inner, r_outer, y_bot, 0.0, TAU, segments, false
     );
 
     build_mesh(pos, nor, uvs, idx)
@@ -115,150 +196,28 @@ fn generate_sector_mesh(
     let mut idx: Vec<u32> = Vec::new();
 
     // Curved walls
-    add_cylinder_wall(
-        &mut pos, &mut nor, &mut uvs, &mut idx, r_outer, y_bot, y_top, a_start, a_end, segments,
-        true,
+    add_cylinder_wall!(
+        pos, nor, uvs, idx, r_outer, y_bot, y_top, a_start, a_end, segments, true
     );
-    add_cylinder_wall(
-        &mut pos, &mut nor, &mut uvs, &mut idx, r_inner, y_bot, y_top, a_start, a_end, segments,
-        false,
+    add_cylinder_wall!(
+        pos, nor, uvs, idx, r_inner, y_bot, y_top, a_start, a_end, segments, false
     );
     // Top/bottom caps
-    add_annulus_cap(
-        &mut pos, &mut nor, &mut uvs, &mut idx, r_inner, r_outer, y_top, a_start, a_end, segments,
-        true,
+    add_annulus_cap!(
+        pos, nor, uvs, idx, r_inner, r_outer, y_top, a_start, a_end, segments, true
     );
-    add_annulus_cap(
-        &mut pos, &mut nor, &mut uvs, &mut idx, r_inner, r_outer, y_bot, a_start, a_end, segments,
-        false,
+    add_annulus_cap!(
+        pos, nor, uvs, idx, r_inner, r_outer, y_bot, a_start, a_end, segments, false
     );
     // Side walls (slot walls)
-    add_radial_wall(
-        &mut pos, &mut nor, &mut uvs, &mut idx, r_inner, r_outer, y_bot, y_top, a_start, true,
+    add_radial_wall!(
+        pos, nor, uvs, idx, r_inner, r_outer, y_bot, y_top, a_start, true
     );
-    add_radial_wall(
-        &mut pos, &mut nor, &mut uvs, &mut idx, r_inner, r_outer, y_bot, y_top, a_end, false,
+    add_radial_wall!(
+        pos, nor, uvs, idx, r_inner, r_outer, y_bot, y_top, a_end, false
     );
 
     build_mesh(pos, nor, uvs, idx)
-}
-
-/// Add a curved cylinder wall (outward or inward facing).
-fn add_cylinder_wall(
-    pos: &mut Vec<[f32; 3]>,
-    nor: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
-    idx: &mut Vec<u32>,
-    radius: f32,
-    y_bot: f32,
-    y_top: f32,
-    a_start: f32,
-    a_end: f32,
-    segments: usize,
-    outward: bool,
-) {
-    let base = pos.len() as u32;
-    for i in 0..=segments {
-        let t = i as f32 / segments as f32;
-        let a = a_start + t * (a_end - a_start);
-        let (c, s) = (a.cos(), a.sin());
-        let n_dir = if outward { 1.0 } else { -1.0 };
-        pos.push([radius * c, y_bot, radius * s]);
-        nor.push([n_dir * c, 0.0, n_dir * s]);
-        uvs.push([t, 0.0]);
-        pos.push([radius * c, y_top, radius * s]);
-        nor.push([n_dir * c, 0.0, n_dir * s]);
-        uvs.push([t, 1.0]);
-    }
-    for i in 0..segments {
-        let b = base + (i as u32) * 2;
-        if outward {
-            idx.extend_from_slice(&[b, b + 1, b + 3, b, b + 3, b + 2]);
-        } else {
-            idx.extend_from_slice(&[b, b + 3, b + 1, b, b + 2, b + 3]);
-        }
-    }
-}
-
-/// Add an annulus cap (top or bottom face).
-fn add_annulus_cap(
-    pos: &mut Vec<[f32; 3]>,
-    nor: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
-    idx: &mut Vec<u32>,
-    r_inner: f32,
-    r_outer: f32,
-    y: f32,
-    a_start: f32,
-    a_end: f32,
-    segments: usize,
-    top: bool,
-) {
-    let base = pos.len() as u32;
-    let ny = if top { 1.0 } else { -1.0 };
-    for i in 0..=segments {
-        let t = i as f32 / segments as f32;
-        let a = a_start + t * (a_end - a_start);
-        let (c, s) = (a.cos(), a.sin());
-        pos.push([r_outer * c, y, r_outer * s]);
-        nor.push([0.0, ny, 0.0]);
-        uvs.push([t, 1.0]);
-        pos.push([r_inner * c, y, r_inner * s]);
-        nor.push([0.0, ny, 0.0]);
-        uvs.push([t, 0.0]);
-    }
-    for i in 0..segments {
-        let b = base + (i as u32) * 2;
-        if top {
-            idx.extend_from_slice(&[b, b + 1, b + 3, b, b + 3, b + 2]);
-        } else {
-            idx.extend_from_slice(&[b, b + 3, b + 1, b, b + 2, b + 3]);
-        }
-    }
-}
-
-/// Add a flat radial wall (slot wall) at a fixed angle.
-fn add_radial_wall(
-    pos: &mut Vec<[f32; 3]>,
-    nor: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
-    idx: &mut Vec<u32>,
-    r_inner: f32,
-    r_outer: f32,
-    y_bot: f32,
-    y_top: f32,
-    angle: f32,
-    left_side: bool,
-) {
-    let base = pos.len() as u32;
-    let (c, s) = (angle.cos(), angle.sin());
-    // Normal perpendicular to the radial direction (tangent)
-    let n_dir = if left_side { -1.0 } else { 1.0 };
-    let nx = n_dir * (-s);
-    let nz = n_dir * c;
-
-    // 4 corners: inner-bottom, inner-top, outer-bottom, outer-top
-    pos.push([r_inner * c, y_bot, r_inner * s]);
-    nor.push([nx, 0.0, nz]);
-    uvs.push([0.0, 0.0]);
-
-    pos.push([r_inner * c, y_top, r_inner * s]);
-    nor.push([nx, 0.0, nz]);
-    uvs.push([0.0, 1.0]);
-
-    pos.push([r_outer * c, y_bot, r_outer * s]);
-    nor.push([nx, 0.0, nz]);
-    uvs.push([1.0, 0.0]);
-
-    pos.push([r_outer * c, y_top, r_outer * s]);
-    nor.push([nx, 0.0, nz]);
-    uvs.push([1.0, 1.0]);
-
-    if left_side {
-        idx.extend_from_slice(&[base, base + 1, base + 3, base, base + 3, base + 2]);
-    } else {
-        idx.extend_from_slice(&[base, base + 3, base + 1, base, base + 2, base + 3]);
-    }
 }
 
 fn build_mesh(pos: Vec<[f32; 3]>, nor: Vec<[f32; 3]>, uvs: Vec<[f32; 2]>, idx: Vec<u32>) -> Mesh {
