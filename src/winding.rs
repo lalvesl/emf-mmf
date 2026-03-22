@@ -119,11 +119,12 @@ macro_rules! spawn_endwinding_arc {
 pub fn regenerate_winding(
     mut commands: Commands,
     config: Res<MotorConfig>,
+    mut ev_config: MessageReader<MotorConfigChanged>,
     query: Query<Entity, With<WindingPart>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if !config.is_changed() {
+    if ev_config.read().next().is_none() {
         return;
     }
 
