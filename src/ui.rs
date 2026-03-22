@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 
-use crate::config::MotorConfig;
+use crate::config::{MotorConfig, MotorConfigChanged};
 
 pub struct UiPlugin;
 
@@ -12,10 +12,23 @@ impl Plugin for UiPlugin {
     }
 }
 
-fn ui_panel(mut contexts: EguiContexts, mut config: ResMut<MotorConfig>) {
+fn ui_panel(
+    mut contexts: EguiContexts,
+    mut config: ResMut<MotorConfig>,
+    mut ev_writer: MessageWriter<MotorConfigChanged>,
+    mut first_frame: Local<bool>,
+) {
     let Ok(ctx) = contexts.ctx_mut() else {
         return;
     };
+
+    let mut changed = false;
+
+    // Trigger initial build
+    if !*first_frame {
+        changed = true;
+        *first_frame = true;
+    }
 
     egui::SidePanel::left("motor_config_panel")
         .min_width(220.0)
@@ -34,6 +47,7 @@ fn ui_panel(mut contexts: EguiContexts, mut config: ResMut<MotorConfig>) {
             {
                 config.groove_count = grooves.max(6) as usize;
                 clamp_config(&mut config);
+                changed = true;
             }
             ui.add_space(4.0);
 
@@ -46,6 +60,7 @@ fn ui_panel(mut contexts: EguiContexts, mut config: ResMut<MotorConfig>) {
             {
                 config.phases = phases.max(1) as usize;
                 clamp_config(&mut config);
+                changed = true;
             }
             ui.add_space(4.0);
 
@@ -58,6 +73,7 @@ fn ui_panel(mut contexts: EguiContexts, mut config: ResMut<MotorConfig>) {
             {
                 config.pole_pairs = pole_pairs.max(1) as usize;
                 clamp_config(&mut config);
+                changed = true;
             }
             ui.add_space(4.0);
 
@@ -69,11 +85,17 @@ fn ui_panel(mut contexts: EguiContexts, mut config: ResMut<MotorConfig>) {
                 .changed()
             {
                 config.layers = layers as usize;
+                changed = true;
             }
             ui.add_space(4.0);
 
             // Short-pitched
-            ui.checkbox(&mut config.short_pitched, "Short-pitched coils");
+            if ui
+                .checkbox(&mut config.short_pitched, "Short-pitched coils")
+                .changed()
+            {
+                changed = true;
+            }
 
             ui.add_space(12.0);
             ui.separator();
@@ -105,6 +127,10 @@ fn ui_panel(mut contexts: EguiContexts, mut config: ResMut<MotorConfig>) {
             ui.label("🖱 Right-click drag to rotate");
             ui.label("🖱 Scroll to zoom");
         });
+
+    if changed {
+        ev_writer.write(MotorConfigChanged);
+    }
 }
 
 /// Ensure groove_count stays divisible by 2 * pole_pairs * phases.
