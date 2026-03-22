@@ -10,6 +10,10 @@ pub struct MotorConfig {
     pub pole_pairs: usize,
 }
 
+/// Event triggered when motor configuration changes.
+#[derive(Message)]
+pub struct MotorConfigChanged;
+
 impl Default for MotorConfig {
     fn default() -> Self {
         Self {
