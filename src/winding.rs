@@ -182,41 +182,43 @@ pub fn regenerate_winding(
     }
 
     // --- Endwindings (arcs connecting coil sides) ---
-    for (i, assignment) in assignments.iter().enumerate() {
-        let Some(assign) = assignment else { continue };
-        if assign.direction == Direction::Out {
-            continue; // Only draw endwindings from the "In" side
+    if config.show_endwindings {
+        for (i, assignment) in assignments.iter().enumerate() {
+            let Some(assign) = assignment else { continue };
+            if assign.direction == Direction::Out {
+                continue; // Only draw endwindings from the "In" side
+            }
+            let return_slot = (i + pitch) % n;
+            let mat = phase_mats[assign.phase % phase_mats.len()].clone();
+    
+            // Top endwinding arc
+            spawn_endwinding_arc!(
+                &mut commands,
+                &mut meshes,
+                mat.clone(),
+                i,
+                return_slot,
+                n,
+                half_h + 0.05,
+                0.15 + (assign.phase as f32 * 0.08),
+                tooth_angle,
+                segment_angle
+            );
+    
+            // Bottom endwinding arc
+            spawn_endwinding_arc!(
+                &mut commands,
+                &mut meshes,
+                mat,
+                i,
+                return_slot,
+                n,
+                -half_h - 0.05,
+                -(0.15 + (assign.phase as f32 * 0.08)),
+                tooth_angle,
+                segment_angle
+            );
         }
-        let return_slot = (i + pitch) % n;
-        let mat = phase_mats[assign.phase % phase_mats.len()].clone();
-
-        // Top endwinding arc
-        spawn_endwinding_arc!(
-            &mut commands,
-            &mut meshes,
-            mat.clone(),
-            i,
-            return_slot,
-            n,
-            half_h + 0.05,
-            0.15 + (assign.phase as f32 * 0.08),
-            tooth_angle,
-            segment_angle
-        );
-
-        // Bottom endwinding arc
-        spawn_endwinding_arc!(
-            &mut commands,
-            &mut meshes,
-            mat,
-            i,
-            return_slot,
-            n,
-            -half_h - 0.05,
-            -(0.15 + (assign.phase as f32 * 0.08)),
-            tooth_angle,
-            segment_angle
-        );
     }
 }
 
