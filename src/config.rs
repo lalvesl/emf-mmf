@@ -8,6 +8,7 @@ pub struct MotorConfig {
     pub short_pitched: bool,
     pub layers: usize,
     pub pole_pairs: usize,
+    pub show_endwindings: bool,
 }
 
 /// Event triggered when motor configuration changes.
@@ -22,6 +23,7 @@ impl Default for MotorConfig {
             short_pitched: false,
             layers: 1,
             pole_pairs: 1,
+            show_endwindings: true,
         }
     }
 }
