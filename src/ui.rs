@@ -17,6 +17,7 @@ fn ui_panel(
     mut config: ResMut<MotorConfig>,
     mut ev_writer: MessageWriter<MotorConfigChanged>,
     mut first_frame: Local<bool>,
+    mut minimized: Local<bool>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else {
         return;
@@ -30,103 +31,120 @@ fn ui_panel(
         *first_frame = true;
     }
 
-    egui::SidePanel::left("motor_config_panel")
-        .min_width(220.0)
-        .default_width(260.0)
-        .show(ctx, |ui| {
-            ui.heading("⚡ Motor Configuration");
-            ui.separator();
-            ui.add_space(8.0);
+    if *minimized {
+        egui::Area::new(egui::Id::new("maximize_panel_area"))
+            .anchor(egui::Align2::LEFT_TOP, egui::vec2(10.0, 10.0))
+            .show(ctx, |ui| {
+                if ui.button("⚡ Motor Config").clicked() {
+                    *minimized = false;
+                }
+            });
+    } else {
+        egui::SidePanel::left("motor_config_panel")
+            .min_width(220.0)
+            .default_width(260.0)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.heading("⚡ Motor Configuration");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("⏴").on_hover_text("Minimize Panel").clicked() {
+                            *minimized = true;
+                        }
+                    });
+                });
+                ui.separator();
+                ui.add_space(8.0);
 
-            // Groove count
-            let mut grooves = config.groove_count as i32;
-            ui.label("Grooves (slots)");
-            if ui
-                .add(egui::Slider::new(&mut grooves, 6..=72).step_by(1.0))
-                .changed()
-            {
-                config.groove_count = grooves.max(6) as usize;
-                clamp_config(&mut config);
-                changed = true;
-            }
-            ui.add_space(4.0);
+                // Groove count
+                let mut grooves = config.groove_count as i32;
+                ui.label("Grooves (slots)");
+                if ui
+                    .add(egui::Slider::new(&mut grooves, 6..=72).step_by(1.0))
+                    .changed()
+                {
+                    config.groove_count = grooves.max(6) as usize;
+                    clamp_config(&mut config);
+                    changed = true;
+                }
+                ui.add_space(4.0);
 
-            // Phases
-            let mut phases = config.phases as i32;
-            ui.label("Phases");
-            if ui
-                .add(egui::Slider::new(&mut phases, 1..=6).step_by(1.0))
-                .changed()
-            {
-                config.phases = phases.max(1) as usize;
-                clamp_config(&mut config);
-                changed = true;
-            }
-            ui.add_space(4.0);
+                // Phases
+                let mut phases = config.phases as i32;
+                ui.label("Phases");
+                if ui
+                    .add(egui::Slider::new(&mut phases, 1..=6).step_by(1.0))
+                    .changed()
+                {
+                    config.phases = phases.max(1) as usize;
+                    clamp_config(&mut config);
+                    changed = true;
+                }
+                ui.add_space(4.0);
 
-            // Pole pairs
-            let mut pole_pairs = config.pole_pairs as i32;
-            ui.label("Pole pairs");
-            if ui
-                .add(egui::Slider::new(&mut pole_pairs, 1..=6).step_by(1.0))
-                .changed()
-            {
-                config.pole_pairs = pole_pairs.max(1) as usize;
-                clamp_config(&mut config);
-                changed = true;
-            }
-            ui.add_space(4.0);
+                // Pole pairs
+                let mut pole_pairs = config.pole_pairs as i32;
+                ui.label("Pole pairs");
+                if ui
+                    .add(egui::Slider::new(&mut pole_pairs, 1..=6).step_by(1.0))
+                    .changed()
+                {
+                    config.pole_pairs = pole_pairs.max(1) as usize;
+                    clamp_config(&mut config);
+                    changed = true;
+                }
+                ui.add_space(4.0);
 
-            // Layers
-            let mut layers = config.layers as i32;
-            ui.label("Layers");
-            if ui
-                .add(egui::Slider::new(&mut layers, 1..=2).step_by(1.0))
-                .changed()
-            {
-                config.layers = layers as usize;
-                changed = true;
-            }
-            ui.add_space(4.0);
+                // Layers
+                let mut layers = config.layers as i32;
+                ui.label("Layers");
+                if ui
+                    .add(egui::Slider::new(&mut layers, 1..=2).step_by(1.0))
+                    .changed()
+                {
+                    config.layers = layers as usize;
+                    changed = true;
+                }
+                ui.add_space(4.0);
 
-            // Short-pitched
-            if ui
-                .checkbox(&mut config.short_pitched, "Short-pitched coils")
-                .changed()
-            {
-                changed = true;
-            }
+                // Short-pitched
+                if ui
+                    .checkbox(&mut config.short_pitched, "Short-pitched coils")
+                    .changed()
+                {
+                    changed = true;
+                }
 
-            ui.add_space(12.0);
-            ui.separator();
-            ui.add_space(8.0);
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(8.0);
 
-            // Info panel
-            let n = config.groove_count;
-            let m = config.phases;
-            let p = config.pole_pairs;
-            let valid = m > 0 && p > 0 && n >= 2 * p * m && n.is_multiple_of(2 * p * m);
+                // Info panel
+                let n = config.groove_count;
+                let m = config.phases;
+                let p = config.pole_pairs;
+                let valid = m > 0 && p > 0 && n >= 2 * p * m && n.is_multiple_of(2 * p * m);
 
-            if valid {
-                let q = n / (2 * p * m);
-                let slots_per_pole = n / (2 * p);
-                ui.label(format!("Slots per pole per phase: {}", q));
-                ui.label(format!("Slots per pole: {}", slots_per_pole));
-                ui.label(format!("Total poles: {}", 2 * p));
-                ui.colored_label(egui::Color32::GREEN, "✓ Valid configuration");
-            } else {
-                ui.colored_label(
-                    egui::Color32::YELLOW,
-                    "⚠ Invalid: grooves must be divisible\n  by 2 × poles × phases",
-                );
-            }
+                if valid {
+                    let q = n / (2 * p * m);
+                    let slots_per_pole = n / (2 * p);
+                    ui.label(format!("Slots per pole per phase: {}", q));
+                    ui.label(format!("Slots per pole: {}", slots_per_pole));
+                    ui.label(format!("Total poles: {}", 2 * p));
+                    ui.colored_label(egui::Color32::GREEN, "✓ Valid configuration");
+                } else {
+                    ui.colored_label(
+                        egui::Color32::YELLOW,
+                        "⚠ Invalid: grooves must be divisible\n  by 2 × poles × phases",
+                    );
+                }
 
-            ui.add_space(12.0);
-            ui.separator();
-            ui.add_space(4.0);
-            ui.label("🖱 Right-click drag to rotate");
-            ui.label("🖱 Scroll to zoom");
-        });
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(4.0);
+                ui.label("🖱 Right-click drag to rotate");
+                ui.label("🖱 Scroll to zoom");
+            });
+    }
 
     if changed {
         ev_writer.write(MotorConfigChanged);
