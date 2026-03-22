@@ -2,7 +2,6 @@ use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
 
 use crate::config::*;
-use crate::stator::StatorPart;
 
 /// Direction of current flow in a slot conductor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -110,7 +109,6 @@ macro_rules! spawn_endwinding_arc {
                     MeshMaterial3d(material.clone()),
                     Transform::from_translation(mid).with_rotation(rotation),
                     WindingPart,
-                    StatorPart,
                 ));
             }
         }
@@ -179,7 +177,6 @@ pub fn regenerate_winding(
             Transform::from_xyz(x, 0.0, z)
                 .with_rotation(Quat::from_rotation_y(-slot_center + PI / 2.0)),
             WindingPart,
-            StatorPart,
         ));
     }
 
