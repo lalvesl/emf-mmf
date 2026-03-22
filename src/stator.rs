@@ -14,11 +14,12 @@ pub struct StatorPart;
 pub fn regenerate_stator(
     mut commands: Commands,
     config: Res<MotorConfig>,
+    mut ev_config: MessageReader<MotorConfigChanged>,
     query: Query<Entity, With<StatorPart>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if !config.is_changed() {
+    if ev_config.read().next().is_none() {
         return;
     }
 
