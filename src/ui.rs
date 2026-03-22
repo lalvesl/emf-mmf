@@ -113,6 +113,13 @@ fn ui_panel(
                 {
                     changed = true;
                 }
+                if ui
+                    .checkbox(&mut config.show_endwindings, "Show coil headers")
+                    .on_hover_text("Toggle visibility of endwinding arcs")
+                    .changed()
+                {
+                    changed = true;
+                }
 
                 ui.add_space(12.0);
                 ui.separator();
