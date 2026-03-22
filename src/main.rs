@@ -17,6 +17,7 @@ fn main() {
         }))
         .add_plugins(ui::UiPlugin)
         .init_resource::<config::MotorConfig>()
+        .add_message::<config::MotorConfigChanged>()
         .add_systems(Startup, setup)
         .add_systems(
             Update,
