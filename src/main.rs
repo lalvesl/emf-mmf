@@ -1,4 +1,5 @@
 mod camera;
+mod colors;
 mod config;
 mod i18n;
 mod stator;
