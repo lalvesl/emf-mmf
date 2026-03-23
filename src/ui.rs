@@ -1,13 +1,15 @@
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
+use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 
 use crate::config::{MotorConfig, MotorConfigChanged};
+use crate::i18n::{Language, t};
 
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(EguiPlugin::default())
+            .init_resource::<Language>()
             .add_systems(EguiPrimaryContextPass, ui_panel);
     }
 }
@@ -15,6 +17,7 @@ impl Plugin for UiPlugin {
 fn ui_panel(
     mut contexts: EguiContexts,
     mut config: ResMut<MotorConfig>,
+    mut lang: ResMut<Language>,
     mut ev_writer: MessageWriter<MotorConfigChanged>,
     mut first_frame: Local<bool>,
     mut minimized: Local<bool>,
@@ -35,7 +38,7 @@ fn ui_panel(
         egui::Area::new(egui::Id::new("maximize_panel_area"))
             .anchor(egui::Align2::LEFT_TOP, egui::vec2(10.0, 10.0))
             .show(ctx, |ui| {
-                if ui.button("⚡ Motor Config").clicked() {
+                if ui.button(t(&lang, "motor_config_btn")).clicked() {
                     *minimized = false;
                 }
             });
@@ -45,19 +48,31 @@ fn ui_panel(
             .default_width(260.0)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.heading("⚡ Motor Configuration");
+                    ui.heading(t(&lang, "motor_config_heading"));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("⏴").on_hover_text("Minimize Panel").clicked() {
+                        if ui.button("⏴").on_hover_text(t(&lang, "minimize_panel_hover")).clicked() {
                             *minimized = true;
                         }
                     });
                 });
+                
+                // Language selector
+                ui.horizontal(|ui| {
+                    ui.label("🌐");
+                    if ui.selectable_label(*lang == Language::PtBr, "PT").clicked() {
+                        *lang = Language::PtBr;
+                    }
+                    if ui.selectable_label(*lang == Language::En, "EN").clicked() {
+                        *lang = Language::En;
+                    }
+                });
+
                 ui.separator();
                 ui.add_space(8.0);
 
                 // Groove count
                 let mut grooves = config.groove_count as i32;
-                ui.label("Grooves (slots)");
+                ui.label(t(&lang, "grooves"));
                 if ui
                     .add(egui::Slider::new(&mut grooves, 6..=72).step_by(1.0))
                     .changed()
@@ -70,7 +85,7 @@ fn ui_panel(
 
                 // Phases
                 let mut phases = config.phases as i32;
-                ui.label("Phases");
+                ui.label(t(&lang, "phases"));
                 if ui
                     .add(egui::Slider::new(&mut phases, 1..=6).step_by(1.0))
                     .changed()
@@ -83,7 +98,7 @@ fn ui_panel(
 
                 // Pole pairs
                 let mut pole_pairs = config.pole_pairs as i32;
-                ui.label("Pole pairs");
+                ui.label(t(&lang, "pole_pairs"));
                 if ui
                     .add(egui::Slider::new(&mut pole_pairs, 1..=6).step_by(1.0))
                     .changed()
@@ -96,7 +111,7 @@ fn ui_panel(
 
                 // Layers
                 let mut layers = config.layers as i32;
-                ui.label("Layers");
+                ui.label(t(&lang, "layers"));
                 if ui
                     .add(egui::Slider::new(&mut layers, 1..=2).step_by(1.0))
                     .changed()
@@ -108,14 +123,14 @@ fn ui_panel(
 
                 // Short-pitched
                 if ui
-                    .checkbox(&mut config.short_pitched, "Short-pitched coils")
+                    .checkbox(&mut config.short_pitched, t(&lang, "short_pitched"))
                     .changed()
                 {
                     changed = true;
                 }
                 if ui
-                    .checkbox(&mut config.show_endwindings, "Show coil headers")
-                    .on_hover_text("Toggle visibility of endwinding arcs")
+                    .checkbox(&mut config.show_endwindings, t(&lang, "show_headers"))
+                    .on_hover_text(t(&lang, "toggle_headers_hover"))
                     .changed()
                 {
                     changed = true;
@@ -134,22 +149,24 @@ fn ui_panel(
                 if valid {
                     let q = n / (2 * p * m);
                     let slots_per_pole = n / (2 * p);
-                    ui.label(format!("Slots per pole per phase: {}", q));
-                    ui.label(format!("Slots per pole: {}", slots_per_pole));
-                    ui.label(format!("Total poles: {}", 2 * p));
-                    ui.colored_label(egui::Color32::GREEN, "✓ Valid configuration");
+                    
+                    let q_str = format!("{}: {}", t(&lang, "slots_per_pole_per_phase"), q);
+                    let spp_str = format!("{}: {}", t(&lang, "slots_per_pole"), slots_per_pole);
+                    let poles_str = format!("{}: {}", t(&lang, "total_poles"), 2 * p);
+
+                    ui.label(q_str);
+                    ui.label(spp_str);
+                    ui.label(poles_str);
+                    ui.colored_label(egui::Color32::GREEN, t(&lang, "valid_config"));
                 } else {
-                    ui.colored_label(
-                        egui::Color32::YELLOW,
-                        "⚠ Invalid: grooves must be divisible\n  by 2 × poles × phases",
-                    );
+                    ui.colored_label(egui::Color32::YELLOW, t(&lang, "invalid_config"));
                 }
 
                 ui.add_space(12.0);
                 ui.separator();
                 ui.add_space(4.0);
-                ui.label("🖱 Right-click drag to rotate");
-                ui.label("🖱 Scroll to zoom");
+                ui.label(t(&lang, "rotate_hint"));
+                ui.label(t(&lang, "zoom_hint"));
             });
     }
 
@@ -167,3 +184,5 @@ fn clamp_config(config: &mut MotorConfig) {
         config.groove_count = config.groove_count.max(divisor).min(72);
     }
 }
+
+
