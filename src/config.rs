@@ -11,6 +11,26 @@ pub struct MotorConfig {
     pub show_endwindings: bool,
 }
 
+impl MotorConfig {
+    pub const MIN: MotorConfig = MotorConfig {
+        groove_count: 6,
+        phases: 1,
+        short_pitched: false,
+        layers: 1,
+        pole_pairs: 1,
+        show_endwindings: false,
+    };
+
+    pub const MAX: MotorConfig = MotorConfig {
+        groove_count: 72,
+        phases: 6,
+        short_pitched: true,
+        layers: 2,
+        pole_pairs: 6,
+        show_endwindings: true,
+    };
+}
+
 /// Event triggered when motor configuration changes.
 #[derive(Message)]
 pub struct MotorConfigChanged;
@@ -34,7 +54,8 @@ pub const STATOR_BORE_RADIUS: f32 = 2.0;
 pub const SLOT_DEPTH: f32 = 0.6;
 pub const STATOR_HEIGHT: f32 = 2.0;
 
-pub fn slot_bottom_radius() -> f32 {
+#[inline]
+pub const fn slot_bottom_radius() -> f32 {
     STATOR_BORE_RADIUS + SLOT_DEPTH
 }
 
