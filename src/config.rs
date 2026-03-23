@@ -70,3 +70,14 @@ pub fn phase_color(phase: usize) -> Color {
         _ => Color::srgb(0.914, 0.769, 0.416), // Yellow
     }
 }
+
+pub fn phase_color_opposite(phase: usize) -> Color {
+    let color = phase_color(phase);
+    let hsla: bevy::color::Hsla = color.into();
+    Color::from(bevy::color::Hsla::new(
+        (hsla.hue + 180.0) % 360.0,
+        hsla.saturation,
+        hsla.lightness,
+        hsla.alpha,
+    ))
+}
