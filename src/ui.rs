@@ -74,10 +74,13 @@ fn ui_panel(
                 let mut grooves = config.groove_count as i32;
                 ui.label(t(&lang, "grooves"));
                 if ui
-                    .add(egui::Slider::new(&mut grooves, 6..=72).step_by(1.0))
+                    .add(egui::Slider::new(
+                        &mut grooves,
+                        (MotorConfig::MIN.groove_count as i32)..=(MotorConfig::MAX.groove_count as i32),
+                    ))
                     .changed()
                 {
-                    config.groove_count = grooves.max(6) as usize;
+                    config.groove_count = grooves as usize;
                     clamp_config(&mut config);
                     changed = true;
                 }
@@ -87,10 +90,13 @@ fn ui_panel(
                 let mut phases = config.phases as i32;
                 ui.label(t(&lang, "phases"));
                 if ui
-                    .add(egui::Slider::new(&mut phases, 1..=6).step_by(1.0))
+                    .add(egui::Slider::new(
+                        &mut phases,
+                        (MotorConfig::MIN.phases as i32)..=(MotorConfig::MAX.phases as i32),
+                    ))
                     .changed()
                 {
-                    config.phases = phases.max(1) as usize;
+                    config.phases = phases as usize;
                     clamp_config(&mut config);
                     changed = true;
                 }
@@ -100,10 +106,13 @@ fn ui_panel(
                 let mut pole_pairs = config.pole_pairs as i32;
                 ui.label(t(&lang, "pole_pairs"));
                 if ui
-                    .add(egui::Slider::new(&mut pole_pairs, 1..=6).step_by(1.0))
+                    .add(egui::Slider::new(
+                        &mut pole_pairs,
+                        (MotorConfig::MIN.pole_pairs as i32)..=(MotorConfig::MAX.pole_pairs as i32),
+                    ))
                     .changed()
                 {
-                    config.pole_pairs = pole_pairs.max(1) as usize;
+                    config.pole_pairs = pole_pairs as usize;
                     clamp_config(&mut config);
                     changed = true;
                 }
@@ -113,7 +122,10 @@ fn ui_panel(
                 let mut layers = config.layers as i32;
                 ui.label(t(&lang, "layers"));
                 if ui
-                    .add(egui::Slider::new(&mut layers, 1..=2).step_by(1.0))
+                    .add(egui::Slider::new(
+                        &mut layers,
+                        (MotorConfig::MIN.layers as i32)..=(MotorConfig::MAX.layers as i32),
+                    ))
                     .changed()
                 {
                     config.layers = layers as usize;
@@ -181,7 +193,8 @@ fn clamp_config(config: &mut MotorConfig) {
     if divisor > 0 && !config.groove_count.is_multiple_of(divisor) {
         // Snap to nearest valid value
         config.groove_count = ((config.groove_count + divisor / 2) / divisor) * divisor;
-        config.groove_count = config.groove_count.max(divisor).min(72);
+        config.groove_count = config.groove_count
+            .clamp(divisor.max(MotorConfig::MIN.groove_count), MotorConfig::MAX.groove_count);
     }
 }
 
