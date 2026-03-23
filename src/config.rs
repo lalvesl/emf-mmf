@@ -22,7 +22,7 @@ impl MotorConfig {
     };
 
     pub const MAX: MotorConfig = MotorConfig {
-        groove_count: 72,
+        groove_count: 144,
         phases: 6,
         short_pitched: true,
         layers: 2,

@@ -190,7 +190,7 @@ pub fn regenerate_winding(
             }
             let return_slot = (i + pitch) % n;
             let mat = phase_mats[assign.phase % phase_mats.len()].clone();
-    
+
             // Top endwinding arc
             spawn_endwinding_arc!(
                 &mut commands,
@@ -204,7 +204,7 @@ pub fn regenerate_winding(
                 tooth_angle,
                 segment_angle
             );
-    
+
             // Bottom endwinding arc
             spawn_endwinding_arc!(
                 &mut commands,

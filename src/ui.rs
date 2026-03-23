@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 
 use crate::config::{MotorConfig, MotorConfigChanged};
 use crate::i18n::{Language, t};
@@ -50,12 +50,16 @@ fn ui_panel(
                 ui.horizontal(|ui| {
                     ui.heading(t(&lang, "motor_config_heading"));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("⏴").on_hover_text(t(&lang, "minimize_panel_hover")).clicked() {
+                        if ui
+                            .button("⏴")
+                            .on_hover_text(t(&lang, "minimize_panel_hover"))
+                            .clicked()
+                        {
                             *minimized = true;
                         }
                     });
                 });
-                
+
                 // Language selector
                 ui.horizontal(|ui| {
                     ui.label("🌐");
@@ -76,7 +80,8 @@ fn ui_panel(
                 if ui
                     .add(egui::Slider::new(
                         &mut grooves,
-                        (MotorConfig::MIN.groove_count as i32)..=(MotorConfig::MAX.groove_count as i32),
+                        (MotorConfig::MIN.groove_count as i32)
+                            ..=(MotorConfig::MAX.groove_count as i32),
                     ))
                     .changed()
                 {
@@ -161,7 +166,7 @@ fn ui_panel(
                 if valid {
                     let q = n / (2 * p * m);
                     let slots_per_pole = n / (2 * p);
-                    
+
                     let q_str = format!("{}: {}", t(&lang, "slots_per_pole_per_phase"), q);
                     let spp_str = format!("{}: {}", t(&lang, "slots_per_pole"), slots_per_pole);
                     let poles_str = format!("{}: {}", t(&lang, "total_poles"), 2 * p);
@@ -193,9 +198,9 @@ fn clamp_config(config: &mut MotorConfig) {
     if divisor > 0 && !config.groove_count.is_multiple_of(divisor) {
         // Snap to nearest valid value
         config.groove_count = ((config.groove_count + divisor / 2) / divisor) * divisor;
-        config.groove_count = config.groove_count
-            .clamp(divisor.max(MotorConfig::MIN.groove_count), MotorConfig::MAX.groove_count);
+        config.groove_count = config.groove_count.clamp(
+            divisor.max(MotorConfig::MIN.groove_count),
+            MotorConfig::MAX.groove_count,
+        );
     }
 }
-
-
