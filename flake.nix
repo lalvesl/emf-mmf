@@ -100,6 +100,71 @@
           };
         };
 
+        packages = let
+          rustPlatform = pkgs.makeRustPlatform {
+            cargo = rustStable;
+            rustc = rustStable;
+          };
+        in {
+          default = self.packages.${system}.linux;
+
+          linux = rustPlatform.buildRustPackage {
+            pname = "emf-mmf-linux";
+            version = "0.1.0";
+            src = ./.;
+            cargoLock.lockFile = ./Cargo.lock;
+            
+            nativeBuildInputs = [ pkgs.pkg-config ];
+            buildInputs = waylandDeps;
+            
+            postPatch = ''
+              rm -f .cargo/config.toml
+            '';
+          };
+
+          windows = rustPlatform.buildRustPackage {
+            pname = "emf-mmf-windows";
+            version = "0.1.0";
+            src = ./.;
+            cargoLock.lockFile = ./Cargo.lock;
+            
+            nativeBuildInputs = [ pkgs.pkg-config ];
+            buildInputs = crossDeps;
+            
+            TARGET_CC = "${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
+            CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
+            CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
+            
+            postPatch = ''
+              rm -f .cargo/config.toml
+            '';
+            doCheck = false;
+          };
+
+          web = rustPlatform.buildRustPackage {
+            pname = "emf-mmf-web";
+            version = "0.1.0";
+            src = ./.;
+            cargoLock.lockFile = ./Cargo.lock;
+            
+            nativeBuildInputs = [ pkgs.wasm-bindgen-cli pkgs.binaryen ];
+            
+            CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
+            cargoBuildType = "wasm-release";
+
+            postPatch = ''
+              rm -f .cargo/config.toml
+            '';
+            doCheck = false;
+            
+            installPhase = ''
+              mkdir -p $out
+              wasm-bindgen --out-dir $out --target web target/wasm32-unknown-unknown/wasm-release/emf-mmf.wasm
+              echo '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>EMF-MMF Simulator</title></head><body><script type="module">import init from "./emf-mmf.js"; init();</script></body></html>' > $out/index.html
+            '';
+          };
+        };
+
         apps = {
           default = {
             type = "app";
