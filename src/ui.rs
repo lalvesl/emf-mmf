@@ -115,16 +115,17 @@ fn ui_panel(
                             (color.blue * 255.0) as u8,
                         );
                         let letter = (b'A' + i as u8) as char;
-                        
+
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 4.0;
-                            let (rect, response) =
-                                ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                            let (rect, response) = ui
+                                .allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
                             ui.painter().rect_filled(rect, 2.0, egui_color);
 
-                            let phase_name = format!("{} {} ({})", t(&lang, "phase"), i + 1, letter);
+                            let phase_name =
+                                format!("{} {} ({})", t(&lang, "phase"), i + 1, letter);
                             response.on_hover_text(&phase_name);
-                            
+
                             ui.label(letter.to_string()).on_hover_text(&phase_name);
                         });
                     }
