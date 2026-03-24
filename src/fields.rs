@@ -53,7 +53,7 @@ fn regenerate_fields(
                     font_size: 160.0,
                     ..default()
                 },
-                TextColor(color.into()),
+                TextColor(color),
                 Transform::from_scale(Vec3::splat(0.01)),
                 Visibility::default(),
                 MagneticFieldText {
@@ -110,7 +110,7 @@ fn animate_fields(
     let pitch = crate::winding::coil_pitch(&config) as f32;
 
     let alpha = (p_f32 * TAU) / n;
-    let alpha_m = if config.phases % 2 != 0 {
+    let alpha_m = if !config.phases.is_multiple_of(2) {
         TAU / m_f32
     } else {
         PI / m_f32
