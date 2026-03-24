@@ -149,7 +149,7 @@ fn animate_vectors(
     let mut resultant_vecs: Vec<Vec3> = vec![Vec3::ZERO; 2 * p];
 
     for pole in 0..(2 * p) {
-        for phase in 0..m {
+        for (phase, phase_vec_entry) in phase_vecs[pole].iter_mut().enumerate().take(m) {
             let phase_shift_elec = phase as f32 * alpha_m;
             let current = (elec_angle - phase_shift_elec).cos();
 
@@ -167,7 +167,7 @@ fn animate_vectors(
             let dir = Vec3::new(axis_phys.cos(), 0.0, axis_phys.sin());
             let scaled_vec = dir * mmf_amplitude;
 
-            phase_vecs[pole][phase] = scaled_vec;
+            *phase_vec_entry = scaled_vec;
             resultant_vecs[pole] += scaled_vec;
         }
     }
