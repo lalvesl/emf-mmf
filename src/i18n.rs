@@ -54,6 +54,9 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "show_vectors") => "Mostrar vetores FMM",
         (Language::En, "show_vectors") => "Show MMF vectors",
 
+        (Language::PtBr, "show_fields") => "Mostrar campos magnéticos",
+        (Language::En, "show_fields") => "Show magnetic fields",
+
         (Language::PtBr, "toggle_headers_hover") => {
             "Alternar visibilidade dos arcos de enrolamento"
         }

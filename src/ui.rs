@@ -187,6 +187,12 @@ fn ui_panel(
                 {
                     changed = true;
                 }
+                if ui
+                    .checkbox(&mut config.show_fields, t(&lang, "show_fields"))
+                    .changed()
+                {
+                    changed = true;
+                }
 
                 ui.add_space(12.0);
                 ui.separator();
