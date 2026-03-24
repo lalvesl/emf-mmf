@@ -76,7 +76,7 @@ fn ui_panel(
 
                 // Groove count
                 let mut grooves = config.groove_count as i32;
-                ui.label(t(&lang, "grooves"));
+                ui.label(format!("{} (S)", t(&lang, "grooves")));
                 if ui
                     .add(egui::Slider::new(
                         &mut grooves,
@@ -93,7 +93,7 @@ fn ui_panel(
 
                 // Phases
                 let mut phases = config.phases as i32;
-                ui.label(t(&lang, "phases"));
+                ui.label(format!("{} (m)", t(&lang, "phases")));
                 if ui
                     .add(egui::Slider::new(
                         &mut phases,
@@ -114,9 +114,10 @@ fn ui_panel(
                             (color.green * 255.0) as u8,
                             (color.blue * 255.0) as u8,
                         );
-                        let (rect, response) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                        let (rect, response) =
+                            ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
                         ui.painter().rect_filled(rect, 2.0, egui_color);
-                        
+
                         let phase_name = format!("{} {}", t(&lang, "phase"), i + 1);
                         response.on_hover_text(phase_name);
                     }
@@ -125,7 +126,7 @@ fn ui_panel(
 
                 // Poles
                 let mut poles = (config.pole_pairs * 2) as i32;
-                ui.label(t(&lang, "poles"));
+                ui.label(format!("{}(P)", t(&lang, "poles")));
                 if ui
                     .add(
                         egui::Slider::new(
