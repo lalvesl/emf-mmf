@@ -1,5 +1,5 @@
-use std::f32::consts::{PI, TAU};
 use bevy::prelude::*;
+use std::f32::consts::{PI, TAU};
 
 use crate::config::{MotorConfig, MotorConfigChanged};
 use crate::eletrical::ElectricalState;
@@ -62,7 +62,10 @@ fn regenerate_vectors(
                 .spawn((
                     Transform::default(),
                     Visibility::default(),
-                    MmfVector { phase: Some(phase), pole },
+                    MmfVector {
+                        phase: Some(phase),
+                        pole,
+                    },
                 ))
                 .with_children(|parent| {
                     parent.spawn((
@@ -134,7 +137,7 @@ fn animate_vectors(
     let pitch = crate::winding::coil_pitch(&config) as f32;
 
     let alpha = (p_f32 * TAU) / n;
-    let alpha_m = if config.phases % 2 != 0 {
+    let alpha_m = if !config.phases.is_multiple_of(2) {
         TAU / m_f32
     } else {
         PI / m_f32
@@ -149,18 +152,18 @@ fn animate_vectors(
         for phase in 0..m {
             let phase_shift_elec = phase as f32 * alpha_m;
             let current = (elec_angle - phase_shift_elec).cos();
-            
+
             // Start of the coil group (electrical)
             let start_elec = phase_shift_elec + (pole as f32 * PI);
-            
+
             // Magnetic axis offset from start
             let offset_elec = (q - 1.0 + pitch) / 2.0 * alpha;
             let center_elec = start_elec + offset_elec;
-            
+
             let axis_phys = (center_elec / p_f32) + offset_mech;
 
             let mmf_amplitude = current * if pole % 2 == 0 { 1.0 } else { -1.0 };
-            
+
             let dir = Vec3::new(axis_phys.cos(), 0.0, axis_phys.sin());
             let scaled_vec = dir * mmf_amplitude;
 
@@ -171,8 +174,17 @@ fn animate_vectors(
 
     for (vector, mut transform) in &mut query {
         let pole = vector.pole;
-        
+
+        // Defend against outdated entities from a previous configuration
+        // waiting to be despawned cleanly by the commands buffer.
+        if pole >= 2 * p {
+            continue;
+        }
+
         let (target_vec, max_ideal) = if let Some(phase) = vector.phase {
+            if phase >= m {
+                continue;
+            }
             (phase_vecs[pole][phase], 1.0)
         } else {
             // MMF magnitude max expected mathematically is roughly `m / 2`
@@ -186,7 +198,7 @@ fn animate_vectors(
             let normalized = target_vec / length;
             let rot = Quat::from_rotation_arc(Vec3::Y, normalized);
             transform.rotation = rot;
-            
+
             transform.scale = Vec3::new(1.0, scale_length.max(0.01), 1.0);
         } else {
             transform.scale = Vec3::ZERO;
