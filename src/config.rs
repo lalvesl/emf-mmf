@@ -12,7 +12,7 @@ pub struct MotorConfig {
 }
 
 impl MotorConfig {
-    pub const MIN: MotorConfig = MotorConfig {
+    pub const MIN: Self = Self {
         groove_count: 6,
         phases: 1,
         short_pitched: false,
@@ -21,7 +21,7 @@ impl MotorConfig {
         show_endwindings: false,
     };
 
-    pub const MAX: MotorConfig = MotorConfig {
+    pub const MAX: Self = Self {
         groove_count: 144,
         phases: 6,
         short_pitched: true,
