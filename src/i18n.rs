@@ -18,6 +18,18 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "minimize_panel_hover") => "Minimizar Painel",
         (Language::En, "minimize_panel_hover") => "Minimize Panel",
 
+        (Language::PtBr, "electrical_currents") => "Correntes Elétricas",
+        (Language::En, "electrical_currents") => "Electrical Currents",
+
+        (Language::PtBr, "play") => "▶ Iniciar",
+        (Language::En, "play") => "▶ Play",
+
+        (Language::PtBr, "pause") => "⏸ Pausar",
+        (Language::En, "pause") => "⏸ Pause",
+
+        (Language::PtBr, "speed") => "Velocidade",
+        (Language::En, "speed") => "Speed",
+
         (Language::PtBr, "grooves") => "Ranhuras (cavidades)",
         (Language::En, "grooves") => "Grooves (slots)",
 

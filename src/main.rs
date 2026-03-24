@@ -19,6 +19,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(ui::UiPlugin)
+        .add_plugins(eletrical::EletricalPlugin)
         .init_resource::<config::MotorConfig>()
         .add_message::<config::MotorConfigChanged>()
         .add_systems(Startup, setup)
