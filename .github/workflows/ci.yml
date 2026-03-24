@@ -3,6 +3,7 @@ name: CI Build
 on:
   push:
     branches: [ "main", "master" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master" ]
 
@@ -91,3 +92,48 @@ jobs:
         with:
           name: emf-mmf-web
           path: web-build/
+
+  release:
+    name: Create Release
+    needs: [build-linux, build-windows, build-web]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: emf-mmf-linux
+          path: ./linux-artifact
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: emf-mmf-windows
+          path: ./windows-artifact
+
+      - name: Download Web Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: emf-mmf-web
+          path: ./web-artifact
+
+      - name: Package Web
+        run: |
+          cd web-artifact
+          zip -r ../emf-mmf-web.zip .
+          cd ..
+
+      - name: Rename Binaries
+        run: |
+          mv linux-artifact/emf-mmf linux-emf-mmf
+          mv windows-artifact/emf-mmf.exe windows-emf-mmf.exe
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            linux-emf-mmf
+            windows-emf-mmf.exe
+            emf-mmf-web.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
