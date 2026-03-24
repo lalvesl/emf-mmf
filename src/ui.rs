@@ -203,12 +203,12 @@ fn ui_panel(
                     let alpha = (p as f32 * 360.0) / (n as f32);
                     let alpha_str = format!("{} (α=P/2.360/S): {}°", t(&lang, "slot_angle"), alpha);
 
-                    let alpha_m = if m % 2 != 0 {
+                    let alpha_m = if !m.is_multiple_of(2) {
                         360.0 / m as f32
                     } else {
                         180.0 / m as f32
                     };
-                    let alpha_m_label = if m % 2 != 0 {
+                    let alpha_m_label = if !m.is_multiple_of(2) {
                         "(α.m=360/m)"
                     } else {
                         "(α.m=180/m)"

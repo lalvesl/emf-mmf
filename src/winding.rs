@@ -30,15 +30,15 @@ pub fn compute_winding(config: &MotorConfig) -> Vec<Option<SlotAssignment>> {
     }
 
     let q = n / (2 * p * m); // slots per pole per phase
-    let slots_per_pole = n / (2 * p);
+    let _slots_per_pole = n / (2 * p);
 
     let mut assignments: Vec<Option<SlotAssignment>> = vec![None; n];
 
     for k in 0..(2 * p * m) {
         let k_elec = k % (2 * m);
-        let (phase, direction) = if m % 2 != 0 {
+        let (phase, direction) = if !m.is_multiple_of(2) {
             // odd phases
-            if k_elec % 2 == 0 {
+            if k_elec.is_multiple_of(2) {
                 let f = (k_elec / 2) % m;
                 (f, Direction::In)
             } else {
