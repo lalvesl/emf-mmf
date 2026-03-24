@@ -105,6 +105,19 @@ fn ui_panel(
                     clamp_config(&mut config);
                     changed = true;
                 }
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    for i in 0..config.phases {
+                        let color: bevy::color::Srgba = crate::colors::phase_color(i).into();
+                        let egui_color = egui::Color32::from_rgb(
+                            (color.red * 255.0) as u8,
+                            (color.green * 255.0) as u8,
+                            (color.blue * 255.0) as u8,
+                        );
+                        let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                        ui.painter().rect_filled(rect, 2.0, egui_color);
+                    }
+                });
                 ui.add_space(4.0);
 
                 // Pole pairs
