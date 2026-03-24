@@ -1,0 +1,83 @@
+name: CI Build
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Dependencies
+        run: sudo apt-get update && sudo apt-get install -y g++ pkg-config libx11-dev libasound2-dev libudev-dev
+
+      - name: Cache Cargo Dependencies
+        uses: Swatinem/rust-cache@v2
+        
+      - name: Build
+        run: cargo build --release
+        
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emf-mmf-linux
+          path: target/release/emf-mmf
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Cargo Dependencies
+        uses: Swatinem/rust-cache@v2
+        
+      - name: Build
+        run: cargo build --release
+        
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emf-mmf-windows
+          path: target/release/emf-mmf.exe
+
+  build-web:
+    name: Build Web (WASM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Cache Cargo Dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --target wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli
+
+      - name: Run wasm-bindgen
+        run: |
+          mkdir -p web-build
+          wasm-bindgen --out-dir web-build --target web target/wasm32-unknown-unknown/release/emf-mmf.wasm
+          
+      - name: Add basic HTML
+        run: |
+          echo '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>EMF-MMF Simulator</title></head><body><script type="module">import init from "./emf-mmf.js"; init();</script></body></html>' > web-build/index.html
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emf-mmf-web
+          path: web-build/
