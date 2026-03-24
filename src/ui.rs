@@ -123,17 +123,21 @@ fn ui_panel(
                 });
                 ui.add_space(4.0);
 
-                // Pole pairs
-                let mut pole_pairs = config.pole_pairs as i32;
-                ui.label(t(&lang, "pole_pairs"));
+                // Poles
+                let mut poles = (config.pole_pairs * 2) as i32;
+                ui.label(t(&lang, "poles"));
                 if ui
-                    .add(egui::Slider::new(
-                        &mut pole_pairs,
-                        (MotorConfig::MIN.pole_pairs as i32)..=(MotorConfig::MAX.pole_pairs as i32),
-                    ))
+                    .add(
+                        egui::Slider::new(
+                            &mut poles,
+                            (MotorConfig::MIN.pole_pairs as i32 * 2)
+                                ..=(MotorConfig::MAX.pole_pairs as i32 * 2),
+                        )
+                        .step_by(2.0),
+                    )
                     .changed()
                 {
-                    config.pole_pairs = pole_pairs as usize;
+                    config.pole_pairs = (poles / 2) as usize;
                     clamp_config(&mut config);
                     changed = true;
                 }

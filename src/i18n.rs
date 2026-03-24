@@ -27,8 +27,8 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "phase") => "Fase",
         (Language::En, "phase") => "Phase",
 
-        (Language::PtBr, "pole_pairs") => "Pares de polos",
-        (Language::En, "pole_pairs") => "Pole pairs",
+        (Language::PtBr, "poles") => "Polos",
+        (Language::En, "poles") => "Poles",
 
         (Language::PtBr, "layers") => "Camadas",
         (Language::En, "layers") => "Layers",
