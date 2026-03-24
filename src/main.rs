@@ -5,6 +5,7 @@ mod eletrical;
 mod i18n;
 mod stator;
 mod ui;
+mod vectors;
 mod winding;
 
 use bevy::prelude::*;
@@ -20,6 +21,7 @@ fn main() {
         }))
         .add_plugins(ui::UiPlugin)
         .add_plugins(eletrical::EletricalPlugin)
+        .add_plugins(vectors::VectorsPlugin)
         .init_resource::<config::MotorConfig>()
         .add_message::<config::MotorConfigChanged>()
         .add_systems(Startup, setup)
