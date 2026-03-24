@@ -34,18 +34,29 @@ pub fn compute_winding(config: &MotorConfig) -> Vec<Option<SlotAssignment>> {
 
     let mut assignments: Vec<Option<SlotAssignment>> = vec![None; n];
 
-    for pole in 0..(2 * p) {
-        let direction = if pole % 2 == 0 {
-            Direction::In
+    for k in 0..(2 * p * m) {
+        let k_elec = k % (2 * m);
+        let (phase, direction) = if m % 2 != 0 {
+            // odd phases
+            if k_elec % 2 == 0 {
+                let f = (k_elec / 2) % m;
+                (f, Direction::In)
+            } else {
+                let f = ((k_elec as isize - m as isize) / 2).rem_euclid(m as isize) as usize;
+                (f, Direction::Out)
+            }
         } else {
-            Direction::Out
+            // even phases
+            if k_elec < m {
+                (k_elec, Direction::In)
+            } else {
+                (k_elec - m, Direction::Out)
+            }
         };
 
-        for phase in 0..m {
-            for j in 0..q {
-                let slot_idx = (pole * slots_per_pole + phase * q + j) % n;
-                assignments[slot_idx] = Some(SlotAssignment { phase, direction });
-            }
+        for j in 0..q {
+            let slot_idx = (k * q + j) % n;
+            assignments[slot_idx] = Some(SlotAssignment { phase, direction });
         }
     }
 
