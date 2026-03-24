@@ -60,6 +60,12 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "zoom_hint") => "🖱 Scroll para zoom",
         (Language::En, "zoom_hint") => "🖱 Scroll to zoom",
 
+        (Language::PtBr, "distribution_index") => "Índice de distribuição",
+        (Language::En, "distribution_index") => "Distribution index",
+
+        (Language::PtBr, "slot_angle") => "Ângulo entre ranhuras",
+        (Language::En, "slot_angle") => "Angle between slots",
+
         (Language::PtBr, "slots_per_pole_per_phase") => "Ranhuras por polo e por fase",
         (Language::En, "slots_per_pole_per_phase") => "Slots per pole per phase",
 
