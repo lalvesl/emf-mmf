@@ -46,18 +46,35 @@ fn ui_electrical_waves(
     mut state: ResMut<ElectricalState>,
     config: Res<MotorConfig>,
     lang: Res<Language>,
+    mut minimized: Local<bool>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else {
         return;
     };
 
-    egui::TopBottomPanel::bottom("electrical_currents_panel")
-        .resizable(true)
-        .show(ctx, |ui| {
-            ui.heading(t(&lang, "electrical_currents"));
-            ui.add_space(4.0);
+    if *minimized {
+        egui::TopBottomPanel::bottom("electrical_minimized_panel")
+            .resizable(false)
+            .show(ctx, |ui| {
+                if ui.button(t(&lang, "electrical_currents")).clicked() {
+                    *minimized = false;
+                }
+            });
+    } else {
+        egui::TopBottomPanel::bottom("electrical_currents_panel")
+            .resizable(true)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.heading(t(&lang, "electrical_currents"));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("⏷").on_hover_text(t(&lang, "minimize_panel_hover")).clicked() {
+                            *minimized = true;
+                        }
+                    });
+                });
+                ui.add_space(4.0);
 
-            ui.horizontal(|ui| {
+                ui.horizontal(|ui| {
                 let play_text = if state.playing {
                     t(&lang, "pause")
                 } else {
@@ -151,4 +168,5 @@ fn ui_electrical_waves(
             ui.painter()
                 .circle_filled(egui::pos2(bar_x, rect.top()), 4.0, egui::Color32::WHITE);
         });
+    }
 }
