@@ -16,3 +16,12 @@ opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 3
+
+# Optimized release profile for Web (WASM) to reduce file size and improve performance
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
