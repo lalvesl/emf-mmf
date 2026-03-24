@@ -1,8 +1,8 @@
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::config::MotorConfig;
-use crate::i18n::{t, Language};
+use crate::i18n::{Language, t};
 
 pub struct EletricalPlugin;
 
@@ -51,9 +51,12 @@ fn ui_electrical_waves(
         return;
     };
 
-    egui::Window::new(t(&lang, "electrical_currents"))
-        .default_width(400.0)
+    egui::TopBottomPanel::bottom("electrical_currents_panel")
+        .resizable(true)
         .show(ctx, |ui| {
+            ui.heading(t(&lang, "electrical_currents"));
+            ui.add_space(4.0);
+
             ui.horizontal(|ui| {
                 let play_text = if state.playing {
                     t(&lang, "pause")
@@ -63,14 +66,18 @@ fn ui_electrical_waves(
                 if ui.button(play_text).clicked() {
                     state.playing = !state.playing;
                 }
-                ui.add(egui::Slider::new(&mut state.speed, 0.1..=10.0).text(t(&lang, "speed")));
+                ui.add(
+                    egui::Slider::new(&mut state.speed, 0.05..=5.0)
+                        .step_by(0.05)
+                        .text(t(&lang, "speed")),
+                );
             });
 
             ui.add_space(10.0);
 
             // Draw the waves
-            let (rect, response) =
-                ui.allocate_exact_size(egui::vec2(ui.available_width(), 150.0), egui::Sense::drag());
+            let (rect, response) = ui
+                .allocate_exact_size(egui::vec2(ui.available_width(), 150.0), egui::Sense::drag());
 
             // Background
             ui.painter()
@@ -78,8 +85,11 @@ fn ui_electrical_waves(
 
             // Axes
             let center_y = rect.center().y;
-            ui.painter()
-                .hline(rect.x_range(), center_y, (1.0, egui::Color32::from_gray(100)));
+            ui.painter().hline(
+                rect.x_range(),
+                center_y,
+                (1.0, egui::Color32::from_gray(100)),
+            );
 
             let m = config.phases;
             let width = rect.width();
@@ -116,8 +126,10 @@ fn ui_electrical_waves(
                     points.push(egui::pos2(x, y));
                 }
 
-                ui.painter()
-                    .add(egui::Shape::line(points, egui::Stroke::new(2.0, color_egui)));
+                ui.painter().add(egui::Shape::line(
+                    points,
+                    egui::Stroke::new(2.0, color_egui),
+                ));
             }
 
             // Draggable bar logic
