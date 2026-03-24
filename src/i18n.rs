@@ -51,6 +51,9 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "show_headers") => "Mostrar cabeças de bobina",
         (Language::En, "show_headers") => "Show coil headers",
 
+        (Language::PtBr, "show_vectors") => "Mostrar vetores FMM",
+        (Language::En, "show_vectors") => "Show MMF vectors",
+
         (Language::PtBr, "toggle_headers_hover") => {
             "Alternar visibilidade dos arcos de enrolamento"
         }

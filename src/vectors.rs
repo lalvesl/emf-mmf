@@ -36,6 +36,10 @@ fn regenerate_vectors(
         commands.entity(entity).despawn();
     }
 
+    if !config.show_vectors {
+        return;
+    }
+
     let m = config.phases;
     let p = config.pole_pairs;
     if m == 0 || p == 0 {
@@ -121,6 +125,10 @@ fn animate_vectors(
     state: Res<ElectricalState>,
     mut query: Query<(&MmfVector, &mut Transform)>,
 ) {
+    if !config.show_vectors {
+        return;
+    }
+
     let m = config.phases;
     let p = config.pole_pairs;
     if m == 0 || p == 0 {

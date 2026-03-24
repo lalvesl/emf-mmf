@@ -2,6 +2,7 @@ mod camera;
 mod colors;
 mod config;
 mod eletrical;
+mod fields;
 mod i18n;
 mod stator;
 mod ui;

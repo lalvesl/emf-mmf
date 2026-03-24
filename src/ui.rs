@@ -181,6 +181,12 @@ fn ui_panel(
                 {
                     changed = true;
                 }
+                if ui
+                    .checkbox(&mut config.show_vectors, t(&lang, "show_vectors"))
+                    .changed()
+                {
+                    changed = true;
+                }
 
                 ui.add_space(12.0);
                 ui.separator();

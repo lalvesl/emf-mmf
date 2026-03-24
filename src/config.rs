@@ -9,6 +9,7 @@ pub struct MotorConfig {
     pub layers: usize,
     pub pole_pairs: usize,
     pub show_endwindings: bool,
+    pub show_vectors: bool,
 }
 
 impl MotorConfig {
@@ -19,6 +20,7 @@ impl MotorConfig {
         layers: 1,
         pole_pairs: 1,
         show_endwindings: false,
+        show_vectors: false,
     };
 
     pub const MAX: Self = Self {
@@ -28,6 +30,7 @@ impl MotorConfig {
         layers: 2,
         pole_pairs: 6,
         show_endwindings: true,
+        show_vectors: true,
     };
 }
 
@@ -44,6 +47,7 @@ impl Default for MotorConfig {
             layers: 1,
             pole_pairs: 1,
             show_endwindings: true,
+            show_vectors: true,
         }
     }
 }
