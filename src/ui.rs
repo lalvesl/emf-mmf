@@ -191,14 +191,32 @@ fn ui_panel(
                     let q_str = format!("{} (q=S/(m.P)): {}", t(&lang, "distribution_index"), q);
                     let spp_str = format!("{}: {}", t(&lang, "slots_per_pole"), slots_per_pole);
                     let poles_str = format!("{}: {}", t(&lang, "total_poles"), 2 * p);
-                    
+
                     let alpha = (p as f32 * 360.0) / (n as f32);
                     let alpha_str = format!("{} (α=P/2.360/S): {}°", t(&lang, "slot_angle"), alpha);
+
+                    let alpha_m = if m % 2 != 0 {
+                        360.0 / m as f32
+                    } else {
+                        180.0 / m as f32
+                    };
+                    let alpha_m_label = if m % 2 != 0 {
+                        "(α.m=360/m)"
+                    } else {
+                        "(α.m=180/m)"
+                    };
+                    let alpha_m_str = format!(
+                        "{} {}: {}°",
+                        t(&lang, "phase_angle"),
+                        alpha_m_label,
+                        alpha_m
+                    );
 
                     ui.label(q_str);
                     ui.label(spp_str);
                     ui.label(poles_str);
                     ui.label(alpha_str);
+                    ui.label(alpha_m_str);
                     ui.colored_label(egui::Color32::GREEN, t(&lang, "valid_config"));
                 } else {
                     ui.colored_label(egui::Color32::YELLOW, t(&lang, "invalid_config"));

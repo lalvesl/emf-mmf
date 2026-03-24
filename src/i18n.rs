@@ -66,6 +66,9 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "slot_angle") => "Ângulo entre ranhuras",
         (Language::En, "slot_angle") => "Angle between slots",
 
+        (Language::PtBr, "phase_angle") => "Ângulo entre fases",
+        (Language::En, "phase_angle") => "Angle between phases",
+
         (Language::PtBr, "slots_per_pole_per_phase") => "Ranhuras por polo e por fase",
         (Language::En, "slots_per_pole_per_phase") => "Slots per pole per phase",
 
