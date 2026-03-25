@@ -17,23 +17,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Disable unstable Cargo features preventing CI builds
-        run: rm -f .cargo/config.toml
-      
-      - name: Install Dependencies
-        run: sudo apt-get update && sudo apt-get install -y g++ pkg-config libx11-dev libasound2-dev libudev-dev
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
 
-      - name: Cache Cargo Dependencies
-        uses: Swatinem/rust-cache@v2
-        
       - name: Build
-        run: cargo build --release
+        run: nix build .#linux
         
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: emf-mmf-linux
-          path: target/release/emf-mmf
+          path: result/bin/emf-mmf
 
   build-windows:
     name: Build Windows
@@ -41,21 +37,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Disable unstable Cargo features preventing CI builds
-        shell: bash
-        run: rm -f .cargo/config.toml
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
 
-      - name: Cache Cargo Dependencies
-        uses: Swatinem/rust-cache@v2
-        
       - name: Build
-        run: cargo build --release
+        run: nix build .#windows
         
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: emf-mmf-windows
-          path: target/release/emf-mmf.exe
+          path: result/bin/emf-mmf.exe
 
   build-web:
     name: Build Web (WASM)
@@ -63,35 +57,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Disable unstable Cargo features preventing CI builds
-        run: rm -f .cargo/config.toml
-
-      - name: Install Rust target
-        run: rustup target add wasm32-unknown-unknown
-
-      - name: Cache Cargo Dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Build
-        run: cargo build --profile wasm-release --target wasm32-unknown-unknown
-
-      - name: Install wasm-bindgen-cli
-        run: cargo install wasm-bindgen-cli
-
-      - name: Run wasm-bindgen
-        run: |
-          mkdir -p web-build
-          wasm-bindgen --out-dir web-build --target web target/wasm32-unknown-unknown/wasm-release/emf-mmf.wasm
-          
-      - name: Add basic HTML
-        run: |
-          echo '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>EMF-MMF Simulator</title></head><body><script type="module">import init from "./emf-mmf.js"; init();</script></body></html>' > web-build/index.html
+        run: nix build .#web
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: emf-mmf-web
-          path: web-build/
+          path: result/
 
   release:
     name: Create Release
