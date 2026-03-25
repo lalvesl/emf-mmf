@@ -152,6 +152,9 @@
               nativeBuildInputs = [
                 pkgs.wasm-bindgen-cli
                 pkgs.binaryen
+              ]
+              ++ waylandDeps
+              ++ [
                 pkgs.pkg-config
               ];
 
