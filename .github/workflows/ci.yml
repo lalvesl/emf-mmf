@@ -23,13 +23,13 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Build
-        run: nix build .#linux
+        run: nix develop .#build -c dx build --release
         
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: emf-mmf-linux
-          path: result/bin/emf-mmf
+          path: dist/emf-mmf
 
   build-windows:
     name: Build Windows
@@ -43,13 +43,13 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Build
-        run: nix build .#windows
+        run: nix develop .#build -c cargo build --release --target x86_64-pc-windows-gnu
         
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: emf-mmf-windows
-          path: result/bin/emf-mmf.exe
+          path: target/x86_64-pc-windows-gnu/release/emf-mmf.exe
 
   build-web:
     name: Build Web (WASM)
@@ -63,13 +63,13 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Build
-        run: nix build .#web
+        run: nix develop .#build -c dx build --platform web --release
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: emf-mmf-web
-          path: result/
+          path: dist/
 
   release:
     name: Create Release
