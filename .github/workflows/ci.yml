@@ -2,10 +2,10 @@ name: CI Build
 
 on:
   push:
-    branches: [ "main", "master" ]
-    tags: [ "v*" ]
+    branches: ["main", "master"]
+    tags: ["v*"]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: ["main", "master"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,10 +13,10 @@ env:
 jobs:
   build-linux:
     name: Build Linux
-    runs-on: nixos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Nix
         uses: cachix/install-nix-action@v27
         with:
@@ -24,7 +24,7 @@ jobs:
 
       - name: Build
         run: nix develop .#build -c dx build --release
-        
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -33,7 +33,7 @@ jobs:
 
   build-windows:
     name: Build Windows
-    runs-on: nixos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -44,7 +44,7 @@ jobs:
 
       - name: Build
         run: nix develop .#build -c cargo build --release --target x86_64-pc-windows-gnu
-        
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -53,7 +53,7 @@ jobs:
 
   build-web:
     name: Build Web (WASM)
-    runs-on: nixos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -75,7 +75,7 @@ jobs:
     name: Create Release
     needs: [build-linux, build-windows, build-web]
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: nixos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Download Linux Artifact
         uses: actions/download-artifact@v4
