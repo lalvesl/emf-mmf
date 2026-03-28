@@ -5,11 +5,31 @@ edition = "2024"
 
 [features]
 default = []
+dev = ["bevy/dynamic_linking"]
+test = ["dev"]
 hotpatching = ["bevy/dynamic_linking"]
 
 [dependencies]
-bevy = "0.18.1"
+bevy = { version = "0.18.1" }
+# , default-features = false, features = [
+#     "bevy_asset",
+#     "bevy_core_pipeline",
+#     "bevy_gizmos",
+#     "bevy_pbr",
+#     "bevy_render",
+#     "bevy_text",
+#     "bevy_winit",
+#     "default_font",
+#     "multi_threaded",
+#     "tonemapping_luts",
+#     "wayland",
+#     "webgl2",
+#     "x11",
+# ] }
 bevy_egui = "0.39.1"
+
+# [dev-dependencies]
+# bevy = { version = "0.18.1" }
 
 [profile.dev]
 opt-level = 1
@@ -25,3 +45,4 @@ lto = "fat"
 codegen-units = 1
 strip = true
 panic = "abort"
+incremental = false
