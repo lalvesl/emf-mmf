@@ -80,7 +80,7 @@
               ];
 
             LD_LIBRARY_PATH = libPath;
-            CARGO_PROFILE_DEV_CODEGEN_BACKEND = "cranelift";
+            # CARGO_PROFILE_DEV_CODEGEN_BACKEND = "cranelift";
           };
 
           build = pkgs.mkShell {
@@ -104,11 +104,56 @@
         packages =
           let
             rustPlatform = pkgs.makeRustPlatform {
-              cargo = rustStable;
-              rustc = rustStable;
+              cargo = rustNightly;
+              rustc = rustNightly;
             };
           in
           {
+            web = pkgs.stdenv.mkDerivation {
+              pname = "emf-mmf-web";
+              version = "0.1.0";
+              src = ./.;
+
+              cargoDeps = rustPlatform.importCargoLock {
+                lockFile = ./Cargo.lock;
+              };
+
+              nativeBuildInputs = [
+                rustPlatform.cargoSetupHook
+                rustNightly
+                pkgs.wasm-bindgen-cli
+                pkgs.binaryen
+                pkgs.pkg-config
+              ]
+              ++ waylandDeps;
+
+              buildPhase = ''
+                # export HOME=$(mktemp -d)
+                cargo build --profile wasm-release --target wasm32-unknown-unknown
+              '';
+
+              installPhase = ''
+                mkdir -p $out
+                # Generate bindings
+                wasm-bindgen --out-dir ./out-wasm --target web target/wasm32-unknown-unknown/wasm-release/emf-mmf.wasm
+
+                # Optimize
+                wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext \
+                  --strip-debug \
+                  --strip-producers \
+                  --dce \
+                  --merge-blocks \
+                  --optimize-instructions \
+                  --output ./out-wasm/emf-mmf_bg.wasm \
+                  ./out-wasm/emf-mmf_bg.wasm
+
+                # Copy generated Wasm and JS
+                cp ./out-wasm/* $out/
+
+                # Generate default index.html
+                echo '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>EMF-MMF Simulator</title></head><body><script type="module">import init from "./emf-mmf.js"; init();</script></body></html>' > $out/index.html
+              '';
+            };
             default = self.packages.${system}.linux;
 
             linux = rustPlatform.buildRustPackage {
@@ -144,35 +189,6 @@
               doCheck = false;
             };
 
-            web = rustPlatform.buildRustPackage {
-              pname = "emf-mmf-web";
-              version = "0.1.0";
-              src = ./.;
-              cargoLock.lockFile = ./Cargo.lock;
-
-              nativeBuildInputs = [
-                pkgs.wasm-bindgen-cli
-                pkgs.binaryen
-              ]
-              ++ waylandDeps
-              ++ [
-                pkgs.pkg-config
-              ];
-
-              CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
-              cargoBuildType = "wasm-release";
-
-              postPatch = ''
-                rm -f .cargo/config.toml
-              '';
-              doCheck = false;
-
-              installPhase = ''
-                mkdir -p $out
-                wasm-bindgen --out-dir $out --target web target/wasm32-unknown-unknown/wasm-release/emf-mmf.wasm
-                echo '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>EMF-MMF Simulator</title></head><body><script type="module">import init from "./emf-mmf.js"; init();</script></body></html>' > $out/index.html
-              '';
-            };
           };
 
         apps = {
