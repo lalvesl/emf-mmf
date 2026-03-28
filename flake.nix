@@ -99,6 +99,22 @@
             LD_LIBRARY_PATH = libPath;
             CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
           };
+
+          stable = pkgs.mkShell {
+            nativeBuildInputs = with pkgs; [
+              pkg-config
+              lld
+            ];
+            buildInputs =
+              waylandDeps
+              ++ crossDeps
+              ++ [
+                rustStable
+                pkgs.dioxus-cli
+              ];
+
+            LD_LIBRARY_PATH = libPath;
+          };
         };
 
         packages =
