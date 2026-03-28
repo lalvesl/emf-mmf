@@ -166,8 +166,8 @@
                 # Copy generated Wasm and JS
                 cp ./out-wasm/* $out/
 
-                # Generate default index.html
-                echo '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>EMF-MMF Simulator</title></head><body><script type="module">import init from "./emf-mmf.js"; init();</script></body></html>' > $out/index.html
+                # Copy index.html
+                cp web/index.html $out/index.html
               '';
             };
             default = self.packages.${system}.linux;
