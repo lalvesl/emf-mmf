@@ -63,13 +63,13 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Build
-        run: nix develop .#build -c dx build --platform web --release
+        run: nix build .#web
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: emf-mmf-web
-          path: dist/
+          path: result/
 
   release:
     name: Create Release
