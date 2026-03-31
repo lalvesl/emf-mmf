@@ -46,3 +46,12 @@ codegen-units = 1
 strip = true
 panic = "abort"
 incremental = false
+
+[profile.performance]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+incremental = false
