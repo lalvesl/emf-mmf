@@ -16,7 +16,9 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
                     title: "EMF-MMF — Stator Winding Simulator".into(),
+                    #[cfg(target_arch = "wasm32")]
                     fit_canvas_to_parent: true,
+                    #[cfg(target_arch = "wasm32")]
                     prevent_default_event_handling: false,
                     ..default()
                 }),
