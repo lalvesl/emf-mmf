@@ -188,15 +188,21 @@
               '';
             };
 
-            windows = rustPlatform.buildRustPackage {
+            windows = pkgs.stdenv.mkDerivation {
               pname = "emf-mmf-windows";
               version = "0.1.0";
               src = ./.;
-              cargoLock.lockFile = ./Cargo.lock;
 
-              profile = "performance";
+              cargoDeps = rustPlatform.importCargoLock {
+                lockFile = ./Cargo.lock;
+              };
 
-              nativeBuildInputs = [ pkgs.pkg-config ];
+              nativeBuildInputs = [
+                rustPlatform.cargoSetupHook
+                rustNightly
+                pkgs.pkg-config
+              ];
+
               buildInputs = crossDeps ++ waylandDeps;
 
               TARGET_CC = "${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
@@ -206,7 +212,15 @@
               postPatch = ''
                 rm -f .cargo/config.toml
               '';
-              doCheck = false;
+
+              buildPhase = ''
+                cargo build --profile performance --target x86_64-pc-windows-gnu
+              '';
+
+              installPhase = ''
+                mkdir -p $out/bin
+                cp target/x86_64-pc-windows-gnu/performance/emf-mmf.exe $out/bin/
+              '';
             };
 
           };
