@@ -72,8 +72,8 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
             "⚠ Invalid: grooves must be divisible\n  by 2 × poles × phases"
         }
 
-        (Language::PtBr, "rotate_hint") => "🖱 Botão direito para rotacionar",
-        (Language::En, "rotate_hint") => "🖱 Right-click drag to rotate",
+        (Language::PtBr, "rotate_hint") => "🖱 Botão esquerdo para rotacionar",
+        (Language::En, "rotate_hint") => "🖱 Left-click drag to rotate",
 
         (Language::PtBr, "zoom_hint") => "🖱 Scroll para zoom",
         (Language::En, "zoom_hint") => "🖱 Scroll to zoom",

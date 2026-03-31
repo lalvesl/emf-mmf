@@ -30,8 +30,7 @@ pub fn orbit_camera(
         return;
     };
 
-    // Rotate on right-click drag (left-click is reserved for UI)
-    if mouse_button.pressed(MouseButton::Right) {
+    if mouse_button.pressed(MouseButton::Left) {
         for event in mouse_motion.read() {
             orbit.yaw -= event.delta.x * 0.005;
             orbit.pitch -= event.delta.y * 0.005;
