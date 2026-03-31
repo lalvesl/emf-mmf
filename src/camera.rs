@@ -25,10 +25,24 @@ pub fn orbit_camera(
     mouse_button: Res<ButtonInput<MouseButton>>,
     mut mouse_motion: MessageReader<MouseMotion>,
     mut scroll: MessageReader<MouseWheel>,
+    mut contexts: bevy_egui::EguiContexts,
 ) {
     let Ok((mut transform, mut orbit)) = query.single_mut() else {
         return;
     };
+
+    let mut egui_handled = false;
+    if let Ok(ctx) = contexts.ctx_mut() {
+        if ctx.wants_pointer_input() || ctx.is_pointer_over_area() {
+            egui_handled = true;
+        }
+    }
+
+    if egui_handled {
+        mouse_motion.clear();
+        scroll.clear();
+        return;
+    }
 
     if mouse_button.pressed(MouseButton::Left) {
         for event in mouse_motion.read() {
