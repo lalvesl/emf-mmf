@@ -172,19 +172,34 @@
             };
             default = self.packages.${system}.linux;
 
-            linux = rustPlatform.buildRustPackage {
+            linux = pkgs.stdenv.mkDerivation {
               pname = "emf-mmf-linux";
               version = "0.1.0";
               src = ./.;
-              cargoLock.lockFile = ./Cargo.lock;
 
-              profile = "performance";
+              cargoDeps = rustPlatform.importCargoLock {
+                lockFile = ./Cargo.lock;
+              };
 
-              nativeBuildInputs = [ pkgs.pkg-config ];
+              nativeBuildInputs = [
+                rustPlatform.cargoSetupHook
+                rustNightly
+                pkgs.pkg-config
+              ];
+
               buildInputs = waylandDeps;
 
               postPatch = ''
                 rm -f .cargo/config.toml
+              '';
+
+              buildPhase = ''
+                cargo build --profile performance
+              '';
+
+              installPhase = ''
+                mkdir -p $out/bin
+                cp target/performance/emf-mmf $out/bin/
               '';
             };
 
