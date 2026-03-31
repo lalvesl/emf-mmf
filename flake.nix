@@ -178,6 +178,8 @@
               src = ./.;
               cargoLock.lockFile = ./Cargo.lock;
 
+              profile = "performance";
+
               nativeBuildInputs = [ pkgs.pkg-config ];
               buildInputs = waylandDeps;
 
@@ -192,8 +194,10 @@
               src = ./.;
               cargoLock.lockFile = ./Cargo.lock;
 
+              profile = "performance";
+
               nativeBuildInputs = [ pkgs.pkg-config ];
-              buildInputs = crossDeps;
+              buildInputs = crossDeps ++ waylandDeps;
 
               TARGET_CC = "${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
               CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
