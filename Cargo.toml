@@ -5,6 +5,7 @@ edition = "2024"
 
 [features]
 default = []
+web = []
 dev = ["bevy/dynamic_linking"]
 test = ["dev"]
 hotpatching = ["bevy/dynamic_linking"]

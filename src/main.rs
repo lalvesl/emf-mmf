@@ -12,18 +12,25 @@ mod winding;
 use bevy::prelude::*;
 
 fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "EMF-MMF — Stator Winding Simulator".into(),
-                #[cfg(target_arch = "wasm32")]
-                fit_canvas_to_parent: true,
-                #[cfg(target_arch = "wasm32")]
-                prevent_default_event_handling: false,
-                ..default()
-            }),
+    let plugins = DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "EMF-MMF — Stator Winding Simulator".into(),
+            #[cfg(feature = "web")]
+            fit_canvas_to_parent: true,
+            #[cfg(feature = "web")]
+            prevent_default_event_handling: false,
             ..default()
-        }))
+        }),
+        ..default()
+    });
+
+    #[cfg(feature = "web")]
+    let plugins = plugins.set(bevy::core::TaskPoolPlugin {
+        task_pool_options: bevy::core::TaskPoolOptions::with_num_threads(1),
+    });
+
+    App::new()
+        .add_plugins(plugins)
         .add_plugins(ui::UiPlugin)
         .add_plugins(eletrical::EletricalPlugin)
         .add_plugins(vectors::VectorsPlugin)

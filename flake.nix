@@ -145,7 +145,7 @@
 
               buildPhase = ''
                 # export HOME=$(mktemp -d)
-                cargo build --profile wasm-release --target wasm32-unknown-unknown
+                cargo build --profile wasm-release --target wasm32-unknown-unknown --features web
               '';
 
               installPhase = ''
@@ -256,7 +256,7 @@
               export CARGO_PROFILE_DEV_CODEGEN_BACKEND="llvm"
               export BEVY_ASSET_ROOT="./src"
               export LD_LIBRARY_PATH="${libPath}:$LD_LIBRARY_PATH"
-              ${pkgs.dioxus-cli}/bin/dx serve --platform web
+              ${pkgs.dioxus-cli}/bin/dx serve --platform web --features web
             ''}/bin/run-web";
           };
 
@@ -265,7 +265,7 @@
             program = "${pkgs.writeShellScriptBin "build-web" ''
               export PATH="${rustStable}/bin:$PATH"
               export BEVY_ASSET_ROOT="."
-              ${pkgs.dioxus-cli}/bin/dx build --platform web --release
+              ${pkgs.dioxus-cli}/bin/dx build --platform web --release --features web
             ''}/bin/build-web";
           };
 
