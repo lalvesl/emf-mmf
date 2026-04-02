@@ -25,8 +25,8 @@ fn main() {
     });
 
     #[cfg(feature = "web")]
-    let plugins = plugins.set(bevy::core::TaskPoolPlugin {
-        task_pool_options: bevy::core::TaskPoolOptions::with_num_threads(1),
+    let plugins = plugins.set(TaskPoolPlugin {
+        task_pool_options: TaskPoolOptions::with_num_threads(1),
     });
 
     App::new()
