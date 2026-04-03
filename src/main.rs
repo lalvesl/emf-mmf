@@ -33,7 +33,7 @@ fn main() {
         .add_plugins(plugins)
         .add_plugins(ui::UiPlugin)
         .add_plugins(eletrical::EletricalPlugin)
-        .add_plugins(vectors::VectorsPlugin)
+        .add_plugins(vectors::MmfVectorsPlugin)
         .add_plugins(fields::FieldsPlugin)
         .init_resource::<config::MotorConfig>()
         .add_message::<config::MotorConfigChanged>()

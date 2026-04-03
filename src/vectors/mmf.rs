@@ -4,9 +4,9 @@ use std::f32::consts::{PI, TAU};
 use crate::config::{MotorConfig, MotorConfigChanged};
 use crate::eletrical::ElectricalState;
 
-pub struct VectorsPlugin;
+pub struct MmfVectorsPlugin;
 
-impl Plugin for VectorsPlugin {
+impl Plugin for MmfVectorsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, (regenerate_vectors, animate_vectors));
     }
