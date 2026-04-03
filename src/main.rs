@@ -2,7 +2,6 @@ mod camera;
 mod colors;
 mod config;
 mod eletrical;
-mod fields;
 mod i18n;
 mod stator;
 mod ui;
@@ -34,7 +33,6 @@ fn main() {
         .add_plugins(ui::UiPlugin)
         .add_plugins(eletrical::EletricalPlugin)
         .add_plugins(vectors::MmfVectorsPlugin)
-        .add_plugins(fields::FieldsPlugin)
         .init_resource::<config::MotorConfig>()
         .add_message::<config::MotorConfigChanged>()
         .add_systems(Startup, setup)
