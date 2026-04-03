@@ -2,7 +2,6 @@ use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
 
 use super::{Direction, SlotAssignment, WindingPart};
-use crate::colors::*;
 use crate::config::*;
 
 macro_rules! spawn_endwinding_arc {

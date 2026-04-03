@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::PI;
 
 use super::{Direction, SlotAssignment, WindingPart};
 use crate::config::*;
