@@ -57,21 +57,17 @@ macro_rules! spawn_endwinding_arc {
     }};
 }
 
-pub fn render_coils(
+pub fn render_conductors(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     data: &super::WindingData,
     phase_mats: &[Handle<StandardMaterial>],
 ) {
-    let n = data.config.groove_count;
-    let config = data.config;
     let assignments = data.assignments;
     let segment_angle = data.segment_angle;
     let tooth_angle = data.tooth_angle;
-    let half_h = data.half_h;
     let r_bore = data.r_bore;
     let r_slot_bot = data.r_slot_bot;
-    let pitch = data.pitch;
 
     // --- Conductors inside slots ---
     for (i, assignment) in assignments.iter().enumerate() {
@@ -99,44 +95,60 @@ pub fn render_coils(
             WindingPart,
         ));
     }
+}
+
+pub fn render_header_coils(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    data: &super::WindingData,
+    phase_mats: &[Handle<StandardMaterial>],
+) {
+    if !data.config.show_endwindings {
+        return;
+    }
+
+    let n = data.config.groove_count;
+    let assignments = data.assignments;
+    let segment_angle = data.segment_angle;
+    let tooth_angle = data.tooth_angle;
+    let half_h = data.half_h;
+    let pitch = data.pitch;
 
     // --- Endwindings (arcs connecting coil sides) ---
-    if config.show_endwindings {
-        for (i, assignment) in assignments.iter().enumerate() {
-            let Some(assign) = assignment else { continue };
-            if assign.direction == Direction::Out {
-                continue; // Only draw endwindings from the "In" side
-            }
-            let return_slot = (i + pitch) % n;
-            let mat = phase_mats[assign.phase % phase_mats.len()].clone();
-
-            // Top endwinding arc
-            spawn_endwinding_arc!(
-                commands,
-                meshes,
-                mat.clone(),
-                i,
-                return_slot,
-                n,
-                half_h + 0.05,
-                0.15 + (assign.phase as f32 * 0.08),
-                tooth_angle,
-                segment_angle
-            );
-
-            // Bottom endwinding arc
-            spawn_endwinding_arc!(
-                commands,
-                meshes,
-                mat,
-                i,
-                return_slot,
-                n,
-                -half_h - 0.05,
-                -(0.15 + (assign.phase as f32 * 0.08)),
-                tooth_angle,
-                segment_angle
-            );
+    for (i, assignment) in assignments.iter().enumerate() {
+        let Some(assign) = assignment else { continue };
+        if assign.direction == Direction::Out {
+            continue; // Only draw endwindings from the "In" side
         }
+        let return_slot = (i + pitch) % n;
+        let mat = phase_mats[assign.phase % phase_mats.len()].clone();
+
+        // Top endwinding arc
+        spawn_endwinding_arc!(
+            commands,
+            meshes,
+            mat.clone(),
+            i,
+            return_slot,
+            n,
+            half_h + 0.05,
+            0.15 + (assign.phase as f32 * 0.08),
+            tooth_angle,
+            segment_angle
+        );
+
+        // Bottom endwinding arc
+        spawn_endwinding_arc!(
+            commands,
+            meshes,
+            mat,
+            i,
+            return_slot,
+            n,
+            -half_h - 0.05,
+            -(0.15 + (assign.phase as f32 * 0.08)),
+            tooth_angle,
+            segment_angle
+        );
     }
 }

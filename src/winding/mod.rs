@@ -5,7 +5,7 @@ use crate::colors::*;
 use crate::config::*;
 
 pub mod current;
-pub mod render;
+pub mod header_coils;
 pub mod ui;
 
 /// Direction of current flow in a slot conductor.
@@ -154,6 +154,7 @@ pub fn regenerate_winding(
         .collect();
 
     // Call split rendering functions
-    render::render_coils(&mut commands, &mut meshes, &data, &phase_mats);
+    header_coils::render_conductors(&mut commands, &mut meshes, &data, &phase_mats);
+    header_coils::render_header_coils(&mut commands, &mut meshes, &data, &phase_mats);
     current::render_current_directions(&mut commands, &mut meshes, &data, &phase_mats_opp);
 }
