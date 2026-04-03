@@ -3,8 +3,8 @@ mod colors;
 mod config;
 mod eletrical;
 mod i18n;
-mod stator;
 mod setup;
+mod stator;
 mod ui;
 mod vectors;
 mod winding;
@@ -47,6 +47,3 @@ fn main() {
         )
         .run();
 }
-
-}
-

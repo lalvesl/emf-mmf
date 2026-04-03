@@ -174,11 +174,7 @@ fn ui_panel(
                 {
                     changed = true;
                 }
-                if ui
-                    .checkbox(&mut config.show_endwindings, t(&lang, "show_headers"))
-                    .on_hover_text(t(&lang, "toggle_headers_hover"))
-                    .changed()
-                {
+                if crate::winding::ui::winding_ui(ui, &mut config, &lang) {
                     changed = true;
                 }
                 if ui

@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use crate::camera;
+use bevy::prelude::*;
 
 pub fn setup(mut commands: Commands) {
     // Ambient light
