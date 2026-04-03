@@ -23,6 +23,12 @@
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
+        # Separate pkgs instance allowing unfree packages (required by Android SDK)
+        pkgsAndroid = import nixpkgs {
+          inherit system overlays;
+          config.allowUnfree = true;
+          config.android_sdk.accept_license = true;
+        };
 
         waylandDeps = with pkgs; [
           wayland
@@ -43,6 +49,7 @@
           targets = [
             "wasm32-unknown-unknown"
             "x86_64-pc-windows-gnu"
+            "aarch64-linux-android"
           ];
         };
 
@@ -50,8 +57,26 @@
           targets = [
             "wasm32-unknown-unknown"
             "x86_64-pc-windows-gnu"
+            "aarch64-linux-android"
           ];
         };
+
+        androidCompose = pkgsAndroid.androidenv.composeAndroidPackages {
+          platformVersions = [ "35" ];
+          abiVersions = [ "arm64-v8a" ];
+          includeNDK = true;
+          ndkVersions = [ "27.2.12479018" ];
+        };
+
+        androidSdk = androidCompose.androidsdk;
+        androidNdkRoot = "${androidSdk}/libexec/android-sdk/ndk/27.2.12479018";
+        androidClang = "${androidNdkRoot}/toolchains/llvm/prebuilt/linux-x86_64/bin";
+
+        androidDeps = [
+          androidSdk
+          pkgs.jdk17
+        ];
+
 
         crossDeps = with pkgs; [
           wasm-bindgen-cli
@@ -235,6 +260,44 @@
               installPhase = ''
                 mkdir -p $out/bin
                 cp target/x86_64-pc-windows-gnu/performance/emf-mmf.exe $out/bin/
+              '';
+            };
+
+            android = pkgs.stdenv.mkDerivation {
+              pname = "emf-mmf-android";
+              version = "0.1.0";
+              src = ./.;
+
+              cargoDeps = rustPlatform.importCargoLock {
+                lockFile = ./Cargo.lock;
+              };
+
+              nativeBuildInputs = [
+                rustPlatform.cargoSetupHook
+                rustNightly
+                pkgs.pkg-config
+              ] ++ androidDeps;
+
+              # Android NDK clang cross-compiler (aarch64, API 35)
+              CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = "${androidClang}/aarch64-linux-android35-clang";
+              CC_aarch64_linux_android = "${androidClang}/aarch64-linux-android35-clang";
+              CXX_aarch64_linux_android = "${androidClang}/aarch64-linux-android35-clang++";
+              AR_aarch64_linux_android = "${androidClang}/llvm-ar";
+              CARGO_BUILD_TARGET = "aarch64-linux-android";
+
+              postPatch = ''
+                rm -f .cargo/config.toml
+              '';
+
+              buildPhase = ''
+                cargo build --profile performance --target aarch64-linux-android
+              '';
+
+              installPhase = ''
+                mkdir -p $out/lib
+                # Copy shared library (.so) if built as cdylib, else copy binary
+                cp target/aarch64-linux-android/performance/libemf_mmf.so $out/lib/ 2>/dev/null || \
+                  cp target/aarch64-linux-android/performance/emf-mmf $out/lib/
               '';
             };
 
