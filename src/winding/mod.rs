@@ -80,6 +80,18 @@ pub fn coil_pitch(config: &MotorConfig) -> usize {
     }
 }
 
+/// Data parameters for winding rendering, reducing argument counts for clippy.
+pub struct WindingData<'a> {
+    pub config: &'a MotorConfig,
+    pub assignments: &'a [Option<SlotAssignment>],
+    pub segment_angle: f32,
+    pub tooth_angle: f32,
+    pub half_h: f32,
+    pub r_bore: f32,
+    pub r_slot_bot: f32,
+    pub pitch: usize,
+}
+
 /// System: generate winding conductors and endwindings when config changes.
 pub fn regenerate_winding(
     mut commands: Commands,
@@ -107,6 +119,17 @@ pub fn regenerate_winding(
     let r_slot_bot = slot_bottom_radius();
     let pitch = coil_pitch(&config);
 
+    let data = WindingData {
+        config: &config,
+        assignments: &assignments,
+        segment_angle,
+        tooth_angle,
+        half_h,
+        r_bore,
+        r_slot_bot,
+        pitch,
+    };
+
     // Pre-create phase materials
     let phase_mats: Vec<_> = (0..config.phases)
         .map(|p| {
@@ -131,29 +154,6 @@ pub fn regenerate_winding(
         .collect();
 
     // Call split rendering functions
-    render::render_coils(
-        &mut commands,
-        &mut meshes,
-        &config,
-        &assignments,
-        &phase_mats,
-        segment_angle,
-        tooth_angle,
-        half_h,
-        r_bore,
-        r_slot_bot,
-        pitch,
-    );
-
-    current::render_current_directions(
-        &mut commands,
-        &mut meshes,
-        &config,
-        &assignments,
-        &phase_mats_opp,
-        segment_angle,
-        tooth_angle,
-        r_bore,
-        r_slot_bot,
-    );
+    render::render_coils(&mut commands, &mut meshes, &data, &phase_mats);
+    current::render_current_directions(&mut commands, &mut meshes, &data, &phase_mats_opp);
 }

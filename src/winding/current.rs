@@ -1,23 +1,24 @@
 use bevy::prelude::*;
 use std::f32::consts::PI;
 
-use super::{Direction, SlotAssignment, WindingPart};
+use super::{Direction, WindingPart};
 use crate::config::*;
 
 pub fn render_current_directions(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
-    config: &MotorConfig,
-    assignments: &[Option<SlotAssignment>],
+    data: &super::WindingData,
     phase_mats_opp: &[Handle<StandardMaterial>],
-    segment_angle: f32,
-    tooth_angle: f32,
-    r_bore: f32,
-    r_slot_bot: f32,
 ) {
-    if config.show_endwindings {
+    if data.config.show_endwindings {
         return;
     }
+
+    let assignments = data.assignments;
+    let segment_angle = data.segment_angle;
+    let tooth_angle = data.tooth_angle;
+    let r_bore = data.r_bore;
+    let r_slot_bot = data.r_slot_bot;
 
     // --- Show current directions (crosses for In, dots for Out) over the coils ---
     for (i, assignment) in assignments.iter().enumerate() {

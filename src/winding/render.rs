@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
 
-use super::{Direction, SlotAssignment, WindingPart};
+use super::{Direction, WindingPart};
 use crate::config::*;
 
 macro_rules! spawn_endwinding_arc {
@@ -60,17 +60,18 @@ macro_rules! spawn_endwinding_arc {
 pub fn render_coils(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
-    config: &MotorConfig,
-    assignments: &[Option<SlotAssignment>],
+    data: &super::WindingData,
     phase_mats: &[Handle<StandardMaterial>],
-    segment_angle: f32,
-    tooth_angle: f32,
-    half_h: f32,
-    r_bore: f32,
-    r_slot_bot: f32,
-    pitch: usize,
 ) {
-    let n = config.groove_count;
+    let n = data.config.groove_count;
+    let config = data.config;
+    let assignments = data.assignments;
+    let segment_angle = data.segment_angle;
+    let tooth_angle = data.tooth_angle;
+    let half_h = data.half_h;
+    let r_bore = data.r_bore;
+    let r_slot_bot = data.r_slot_bot;
+    let pitch = data.pitch;
 
     // --- Conductors inside slots ---
     for (i, assignment) in assignments.iter().enumerate() {
