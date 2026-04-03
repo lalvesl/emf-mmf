@@ -32,11 +32,10 @@ pub fn orbit_camera(
     };
 
     let mut egui_handled = false;
-    if let Ok(ctx) = contexts.ctx_mut() {
-        if ctx.wants_pointer_input() || ctx.is_pointer_over_area() {
+    if let Ok(ctx) = contexts.ctx_mut()
+        && (ctx.wants_pointer_input() || ctx.is_pointer_over_area()) {
             egui_handled = true;
         }
-    }
 
     if egui_handled {
         mouse_motion.clear();
