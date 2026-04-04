@@ -63,20 +63,23 @@
 
         androidCompose = pkgsAndroid.androidenv.composeAndroidPackages {
           platformVersions = [ "35" ];
+          buildToolsVersions = [ "35.0.0" ];
           abiVersions = [ "arm64-v8a" ];
           includeNDK = true;
           ndkVersions = [ "27.2.12479018" ];
         };
 
         androidSdk = androidCompose.androidsdk;
-        androidNdkRoot = "${androidSdk}/libexec/android-sdk/ndk/27.2.12479018";
+        androidSdkRoot = "${androidSdk}/libexec/android-sdk";
+        androidNdkRoot = "${androidSdkRoot}/ndk/27.2.12479018";
         androidClang = "${androidNdkRoot}/toolchains/llvm/prebuilt/linux-x86_64/bin";
+        androidBuildTools = "${androidSdkRoot}/build-tools/35.0.0";
+        androidPlatformJar = "${androidSdkRoot}/platforms/android-35/android.jar";
 
         androidDeps = [
           androidSdk
           pkgs.jdk17
         ];
-
 
         crossDeps = with pkgs; [
           wasm-bindgen-cli
@@ -276,7 +279,8 @@
                 rustPlatform.cargoSetupHook
                 rustNightly
                 pkgs.pkg-config
-              ] ++ androidDeps;
+              ]
+              ++ androidDeps;
 
               # Android NDK clang cross-compiler (aarch64, API 35)
               CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = "${androidClang}/aarch64-linux-android35-clang";
@@ -290,14 +294,94 @@
               '';
 
               buildPhase = ''
+                # 1) Cross-compile the shared library
                 cargo build --profile performance --target aarch64-linux-android
               '';
 
               installPhase = ''
-                mkdir -p $out/lib
-                # Copy shared library (.so) if built as cdylib, else copy binary
-                cp target/aarch64-linux-android/performance/libemf_mmf.so $out/lib/ 2>/dev/null || \
-                  cp target/aarch64-linux-android/performance/emf-mmf $out/lib/
+                mkdir -p $out
+
+                export AAPT2="${androidBuildTools}/aapt2"
+                export ZIPALIGN="${androidBuildTools}/zipalign"
+                export APKSIGNER="${androidBuildTools}/apksigner"
+                export ANDROID_JAR="${androidPlatformJar}"
+
+                SO_FILE="target/aarch64-linux-android/performance/libemf_mmf.so"
+
+                # 2) Create AndroidManifest.xml for NativeActivity
+                cat > AndroidManifest.xml <<MANIFEST
+                <?xml version="1.0" encoding="utf-8"?>
+                <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+                    package="com.lalvesl.emfmmf"
+                    android:versionCode="1"
+                    android:versionName="0.1.0">
+                    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35" />
+                    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+                    <application
+                        android:label="EMF-MMF"
+                        android:hasCode="false">
+                        <activity
+                            android:name="android.app.NativeActivity"
+                            android:exported="true"
+                            android:configChanges="orientation|keyboardHidden|screenSize">
+                            <meta-data android:name="android.app.lib_name" android:value="emf_mmf" />
+                            <intent-filter>
+                                <action android:name="android.intent.action.MAIN" />
+                                <category android:name="android.intent.category.LAUNCHER" />
+                            </intent-filter>
+                        </activity>
+                    </application>
+                </manifest>
+                MANIFEST
+
+                # 3) Compile resources
+                mkdir -p build/compiled_resources
+                $AAPT2 compile --dir . -o build/compiled_resources/ 2>/dev/null || true
+
+                # 4) Link into base APK
+                $AAPT2 link \
+                  --manifest AndroidManifest.xml \
+                  -I $ANDROID_JAR \
+                  -o build/app-unaligned.apk \
+                  --min-sdk-version 21 \
+                  --target-sdk-version 35
+
+                # 5) Inject the native library into the APK
+                mkdir -p build/apk_contents/lib/arm64-v8a
+                cp $SO_FILE build/apk_contents/lib/arm64-v8a/libemf_mmf.so
+
+                # Unzip the base APK, add the .so, repackage
+                mkdir -p build/apk_extracted
+                ${pkgs.unzip}/bin/unzip -o build/app-unaligned.apk -d build/apk_extracted
+                cp -r build/apk_contents/lib build/apk_extracted/
+
+                # Rebuild the APK with the .so included
+                cd build/apk_extracted
+                ${pkgs.zip}/bin/zip -r ../app-with-lib.apk .
+                cd ../.. 
+
+                # 6) Zipalign
+                $ZIPALIGN -f 4 build/app-with-lib.apk build/app-aligned.apk
+
+                # 7) Sign with a debug keystore
+                export HOME=$(pwd)
+                mkdir -p $HOME/.android
+                keytool -genkey -v \
+                  -keystore $HOME/.android/debug.keystore \
+                  -alias androiddebugkey \
+                  -keyalg RSA -keysize 2048 -validity 10000 \
+                  -storepass android -keypass android \
+                  -dname "CN=Android Debug,O=Android,C=US"
+
+                $APKSIGNER sign \
+                  --ks $HOME/.android/debug.keystore \
+                  --ks-key-alias androiddebugkey \
+                  --ks-pass pass:android \
+                  --key-pass pass:android \
+                  --out $out/emf-mmf.apk \
+                  build/app-aligned.apk
+
+                echo "APK built: $out/emf-mmf.apk"
               '';
             };
 
