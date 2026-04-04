@@ -54,6 +54,12 @@
         };
 
         rustStable = pkgs.rust-bin.stable."1.94.0".default.override {
+          extensions = [
+            "rust-src"
+            "rust-analyzer"
+            "clippy"
+            "rustfmt"
+          ];
           targets = [
             "wasm32-unknown-unknown"
             "x86_64-pc-windows-gnu"
@@ -62,8 +68,8 @@
         };
 
         androidCompose = pkgsAndroid.androidenv.composeAndroidPackages {
-          platformVersions = [ "35" ];
-          buildToolsVersions = [ "35.0.0" ];
+          platformVersions = [ "31" ];
+          buildToolsVersions = [ "31.0.0" ];
           abiVersions = [ "arm64-v8a" ];
           includeNDK = true;
           ndkVersions = [ "27.2.12479018" ];
@@ -73,8 +79,8 @@
         androidSdkRoot = "${androidSdk}/libexec/android-sdk";
         androidNdkRoot = "${androidSdkRoot}/ndk/27.2.12479018";
         androidClang = "${androidNdkRoot}/toolchains/llvm/prebuilt/linux-x86_64/bin";
-        androidBuildTools = "${androidSdkRoot}/build-tools/35.0.0";
-        androidPlatformJar = "${androidSdkRoot}/platforms/android-35/android.jar";
+        androidBuildTools = "${androidSdkRoot}/build-tools/31.0.0";
+        androidPlatformJar = "${androidSdkRoot}/platforms/android-31/android.jar";
 
         androidDeps = [
           androidSdk
@@ -282,10 +288,10 @@
               ]
               ++ androidDeps;
 
-              # Android NDK clang cross-compiler (aarch64, API 35)
-              CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = "${androidClang}/aarch64-linux-android35-clang";
-              CC_aarch64_linux_android = "${androidClang}/aarch64-linux-android35-clang";
-              CXX_aarch64_linux_android = "${androidClang}/aarch64-linux-android35-clang++";
+              # Android NDK clang cross-compiler (aarch64, API 31)
+              CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = "${androidClang}/aarch64-linux-android31-clang";
+              CC_aarch64_linux_android = "${androidClang}/aarch64-linux-android31-clang";
+              CXX_aarch64_linux_android = "${androidClang}/aarch64-linux-android31-clang++";
               AR_aarch64_linux_android = "${androidClang}/llvm-ar";
               CARGO_BUILD_TARGET = "aarch64-linux-android";
 
@@ -315,7 +321,7 @@
                     package="com.lalvesl.emfmmf"
                     android:versionCode="1"
                     android:versionName="0.1.0">
-                    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35" />
+                    <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="31" />
                     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
                     <application
                         android:label="EMF-MMF"
@@ -343,8 +349,8 @@
                   --manifest AndroidManifest.xml \
                   -I $ANDROID_JAR \
                   -o build/app-unaligned.apk \
-                  --min-sdk-version 21 \
-                  --target-sdk-version 35
+                  --min-sdk-version 31 \
+                  --target-sdk-version 31
 
                 # 5) Inject the native library into the APK
                 mkdir -p build/apk_contents/lib/arm64-v8a
