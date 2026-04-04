@@ -12,7 +12,7 @@ pub mod winding;
 use bevy::prelude::*;
 
 #[bevy_main]
-pub fn run_app() {
+pub fn main() {
     let plugins = DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: "EMF-MMF — Stator Winding Simulator".into(),

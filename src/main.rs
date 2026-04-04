@@ -1,3 +1,3 @@
 fn main() {
-    emf_mmf::run_app();
+    emf_mmf::main();
 }
