@@ -1,8 +1,9 @@
 pub mod camera;
-pub mod colors;
 pub mod config;
 pub mod eletrical;
 pub mod i18n;
+pub mod mmf_field;
+pub mod phase;
 pub mod setup;
 pub mod stator;
 pub mod ui;
