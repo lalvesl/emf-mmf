@@ -55,7 +55,7 @@ fn regenerate_vectors(
     // Spawn Phase Vectors
     for pole in 0..(2 * p) {
         for phase in 0..m {
-            let color = crate::colors::phase_color(phase);
+            let color = crate::phase::colors::phase_color(phase);
             let mat = materials.add(StandardMaterial {
                 base_color: color,
                 emissive: color.into(),
