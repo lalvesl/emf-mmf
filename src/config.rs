@@ -1,5 +1,34 @@
 use bevy::prelude::*;
 
+const MAX_PHASES: usize = 6;
+
+#[derive(Resource, Clone, Debug)]
+pub struct MmfFieldConfig {
+    pub show: bool,
+    pub phases_to_show: [bool; MAX_PHASES],
+}
+
+impl Default for MmfFieldConfig {
+    fn default() -> Self {
+        Self {
+            show: false,
+            phases_to_show: [false; MAX_PHASES],
+        }
+    }
+}
+
+impl MmfFieldConfig {
+    pub const MIN: Self = Self {
+        show: false,
+        phases_to_show: [false; MAX_PHASES],
+    };
+
+    pub const MAX: Self = Self {
+        show: true,
+        phases_to_show: [true; MAX_PHASES],
+    };
+}
+
 /// Motor winding configuration — user-adjustable parameters.
 #[derive(Resource, Clone, Debug)]
 pub struct MotorConfig {
@@ -11,6 +40,7 @@ pub struct MotorConfig {
     pub show_endwindings: bool,
     pub show_vectors: bool,
     pub show_fields: bool,
+    pub mmf_field: MmfFieldConfig,
 }
 
 impl MotorConfig {
@@ -23,6 +53,7 @@ impl MotorConfig {
         show_endwindings: false,
         show_vectors: false,
         show_fields: false,
+        mmf_field: MmfFieldConfig::MIN,
     };
 
     pub const MAX: Self = Self {
@@ -34,6 +65,7 @@ impl MotorConfig {
         show_endwindings: true,
         show_vectors: true,
         show_fields: true,
+        mmf_field: MmfFieldConfig::MAX,
     };
 }
 
@@ -52,6 +84,7 @@ impl Default for MotorConfig {
             show_endwindings: true,
             show_vectors: true,
             show_fields: true,
+            mmf_field: MmfFieldConfig::default(),
         }
     }
 }
