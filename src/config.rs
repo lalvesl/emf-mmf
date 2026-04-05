@@ -6,6 +6,9 @@ const MAX_PHASES: usize = 6;
 pub struct MmfFieldConfig {
     pub show: bool,
     pub phases_to_show: [bool; MAX_PHASES],
+    /// Controls the sharpness of the gradient falloff:
+    /// 1.0 = linear fade, higher values produce a more peaked/concentrated field.
+    pub gradient_intensity: f32,
 }
 
 impl Default for MmfFieldConfig {
@@ -13,6 +16,7 @@ impl Default for MmfFieldConfig {
         Self {
             show: false,
             phases_to_show: [false; MAX_PHASES],
+            gradient_intensity: 2.0,
         }
     }
 }
@@ -21,11 +25,13 @@ impl MmfFieldConfig {
     pub const MIN: Self = Self {
         show: false,
         phases_to_show: [false; MAX_PHASES],
+        gradient_intensity: 0.5,
     };
 
     pub const MAX: Self = Self {
         show: true,
         phases_to_show: [true; MAX_PHASES],
+        gradient_intensity: 8.0,
     };
 }
 

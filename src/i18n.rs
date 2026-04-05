@@ -102,6 +102,19 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "toggle_mmf_field_hover") => "Alternar visibilidade do campo FMM",
         (Language::En, "toggle_mmf_field_hover") => "Toggle visibility of MMF field",
 
+        (Language::PtBr, "mmf_gradient_intensity") => "Intensidade do gradiente (γ)",
+        (Language::En, "mmf_gradient_intensity") => "Gradient intensity (γ)",
+
+        (Language::PtBr, "mmf_gradient_intensity_hover") => {
+            "Controla a concentração do gradiente de campo: valores maiores deixam o campo mais concentrado no eixo magnético"
+        }
+        (Language::En, "mmf_gradient_intensity_hover") => {
+            "Controls gradient sharpness: higher values concentrate the field more towards the magnetic axis"
+        }
+
+        (Language::PtBr, "phase_group_label") => "Grupo de fase",
+        (Language::En, "phase_group_label") => "Phase group",
+
         _ => panic!("Invalid key: {}", key),
     }
 }
