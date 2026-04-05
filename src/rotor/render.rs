@@ -4,7 +4,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::Indices;
 use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
-use std::f32::consts::TAU;
+use std::f32::consts::{PI, TAU};
 
 pub struct RotorPlugin;
 
@@ -45,17 +45,25 @@ fn regenerate_rotor(
 
     let p = config.pole_pairs;
     let h = STATOR_HEIGHT;
-    let r = ROTOR_RADIUS;
+    let r = ROTOR_RADIUS * 0.8;
 
     // Materials
+    let iron_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.7, 0.7, 0.75),
+        metallic: 0.9,
+        perceptual_roughness: 0.2,
+        ..default()
+    });
     let north_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.8, 0.1, 0.1), // North - Red
-        emissive: LinearRgba::new(0.4, 0.0, 0.0, 1.0),
+        metallic: 0.8,
+        perceptual_roughness: 0.3,
         ..default()
     });
     let south_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.1, 0.1, 0.8), // South - Blue
-        emissive: LinearRgba::new(0.0, 0.0, 0.4, 1.0),
+        metallic: 0.8,
+        perceptual_roughness: 0.3,
         ..default()
     });
 
@@ -68,7 +76,16 @@ fn regenerate_rotor(
             Visibility::default(),
         ))
         .with_children(|parent| {
-            // Poles (2 * p) - each pole is a Cylinder Sector
+            // Central solid iron core (shaft/body)
+            let r_core = r * 0.75;
+            parent.spawn((
+                Mesh3d(meshes.add(Cylinder::new(r_core, h))),
+                MeshMaterial3d(iron_mat),
+                Transform::default(),
+                RotorPart,
+            ));
+
+            // Poles (2 * p) - each pole is a surface segment
             let p_count = 2 * p;
             let pole_angle = TAU / (p_count as f32);
 
@@ -81,7 +98,9 @@ fn regenerate_rotor(
                 };
 
                 parent.spawn((
-                    Mesh3d(meshes.add(build_rotor_sector_mesh(r, h, a_start, pole_angle, 16))),
+                    Mesh3d(meshes.add(build_rotor_sector_mesh(
+                        r_core, r, h, a_start, pole_angle, 16,
+                    ))),
                     MeshMaterial3d(mat),
                     Transform::default(),
                     RotorPart,
@@ -90,9 +109,10 @@ fn regenerate_rotor(
         });
 }
 
-/// Creates a 3D sector (wedge) of a cylinder.
+/// Creates a 3D sector (annular) of a cylinder.
 fn build_rotor_sector_mesh(
-    radius: f32,
+    r_inner: f32,
+    r_outer: f32,
     height: f32,
     start_angle: f32,
     sweep_angle: f32,
@@ -104,109 +124,110 @@ fn build_rotor_sector_mesh(
 
     let half_h = height / 2.0;
 
-    // Vertices:
-    // 0: top center
-    // 1: bot center
-    positions.push([0.0, half_h, 0.0]);
-    normals.push([0.0, 1.0, 0.0]);
-    positions.push([0.0, -half_h, 0.0]);
-    normals.push([0.0, -1.0, 0.0]);
+    // Normals:
+    // Top = +Y
+    // Bot = -Y
+    // Outer = radial
+    // Inner = -radial (inward)
+    // Left side = orthogonal to radius
+    // Right side = orthogonal to radius
 
-    // Arc vertices
-    for i in 0..=segments {
-        let frac = i as f32 / segments as f32;
-        let angle = start_angle + frac * sweep_angle;
-        let c = angle.cos();
-        let s = angle.sin();
-
-        // Top arc
-        positions.push([radius * c, half_h, radius * s]);
-        normals.push([0.0, 1.0, 0.0]);
-
-        // Bot arc
-        positions.push([radius * c, -half_h, radius * s]);
-        normals.push([0.0, -1.0, 0.0]);
-    }
-
-    // Indices for Top cap
-    let top_center = 0;
-    for i in 0..segments {
-        let v0 = 2 + i * 2;
-        let v1 = 2 + (i + 1) * 2;
-        indices.extend_from_slice(&[top_center, v0, v1]);
-    }
-
-    // Indices for Bottom cap
-    let bot_center = 1;
-    for i in 0..segments {
-        let v0 = 2 + i * 2 + 1;
-        let v1 = 2 + (i + 1) * 2 + 1;
-        indices.extend_from_slice(&[bot_center, v1, v0]);
-    }
-
-    // Side walls (the curved part)
-    // We need new vertices for the side walls to have radial normals
-    let side_start_idx = positions.len() as u32;
-    for i in 0..=segments {
-        let frac = i as f32 / segments as f32;
-        let angle = start_angle + frac * sweep_angle;
-        let c = angle.cos();
-        let s = angle.sin();
-
-        // Top arc wall
-        positions.push([radius * c, half_h, radius * s]);
-        normals.push([c, 0.0, s]);
-
-        // Bot arc wall
-        positions.push([radius * c, -half_h, radius * s]);
-        normals.push([c, 0.0, s]);
-    }
-
-    for i in 0..segments {
-        let v0 = side_start_idx + i * 2;
-        let v1 = side_start_idx + (i + 1) * 2;
-        let v2 = v0 + 1;
-        let v3 = v1 + 1;
-        // Two triangles for each segment quad
-        indices.extend_from_slice(&[v0, v1, v3, v0, v3, v2]);
-    }
-
-    // Radial faces (flat sides of the wedge)
-    // Start face
-    {
-        let angle = start_angle;
-        let c = angle.cos();
-        let s = angle.sin();
-        let n = [s, 0.0, -c]; // Normal perpendicular to radial vector
-
-        let base = positions.len() as u32;
-        positions.push([0.0, half_h, 0.0]);
-        positions.push([0.0, -half_h, 0.0]);
-        positions.push([radius * c, half_h, radius * s]);
-        positions.push([radius * c, -half_h, radius * s]);
-        for _ in 0..4 {
-            normals.push(n);
+    let add_wall = |pos: &mut Vec<[f32; 3]>,
+                    nor: &mut Vec<[f32; 3]>,
+                    idx: &mut Vec<u32>,
+                    radius: f32,
+                    outward: bool| {
+        let base = pos.len() as u32;
+        let n_dir = if outward { 1.0 } else { -1.0 };
+        for i in 0..=segments {
+            let frac = i as f32 / segments as f32;
+            let angle = start_angle + frac * sweep_angle;
+            let (c, s) = (angle.cos(), angle.sin());
+            pos.push([radius * c, half_h, radius * s]);
+            nor.push([c * n_dir, 0.0, s * n_dir]);
+            pos.push([radius * c, -half_h, radius * s]);
+            nor.push([c * n_dir, 0.0, s * n_dir]);
         }
-        indices.extend_from_slice(&[base, base + 2, base + 3, base, base + 3, base + 1]);
-    }
-
-    // End face
-    {
-        let angle = start_angle + sweep_angle;
-        let c = angle.cos();
-        let s = angle.sin();
-        let n = [-s, 0.0, c];
-
-        let base = positions.len() as u32;
-        positions.push([0.0, half_h, 0.0]);
-        positions.push([0.0, -half_h, 0.0]);
-        positions.push([radius * c, half_h, radius * s]);
-        positions.push([radius * c, -half_h, radius * s]);
-        for _ in 0..4 {
-            normals.push(n);
+        for i in 0..segments {
+            let b = base + i * 2;
+            if outward {
+                idx.extend_from_slice(&[b, b + 1, b + 3, b, b + 3, b + 2]);
+            } else {
+                idx.extend_from_slice(&[b, b + 3, b + 1, b, b + 2, b + 3]);
+            }
         }
-        indices.extend_from_slice(&[base, base + 3, base + 2, base, base + 1, base + 3]);
-    }
+    };
+
+    let add_cap = |pos: &mut Vec<[f32; 3]>,
+                   nor: &mut Vec<[f32; 3]>,
+                   idx: &mut Vec<u32>,
+                   y: f32,
+                   top: bool| {
+        let base = pos.len() as u32;
+        let ny = if top { 1.0 } else { -1.0 };
+        for i in 0..=segments {
+            let frac = i as f32 / segments as f32;
+            let angle = start_angle + frac * sweep_angle;
+            let (c, s) = (angle.cos(), angle.sin());
+            pos.push([r_outer * c, y, r_outer * s]);
+            nor.push([0.0, ny, 0.0]);
+            pos.push([r_inner * c, y, r_inner * s]);
+            nor.push([0.0, ny, 0.0]);
+        }
+        for i in 0..segments {
+            let b = base + i * 2;
+            if top {
+                idx.extend_from_slice(&[b, b + 1, b + 3, b, b + 3, b + 2]);
+            } else {
+                idx.extend_from_slice(&[b, b + 3, b + 1, b, b + 2, b + 3]);
+            }
+        }
+    };
+
+    let add_radial = |pos: &mut Vec<[f32; 3]>,
+                      nor: &mut Vec<[f32; 3]>,
+                      idx: &mut Vec<u32>,
+                      angle: f32,
+                      start_side: bool| {
+        let base = pos.len() as u32;
+        let (c, s) = (angle.cos(), angle.sin());
+        let n_dir = if start_side { 1.0 } else { -1.0 };
+        let nx = n_dir * s;
+        let nz = n_dir * (-c);
+        let n = [nx, 0.0, nz];
+
+        pos.push([r_inner * c, half_h, r_inner * s]);
+        pos.push([r_inner * c, -half_h, r_inner * s]);
+        pos.push([r_outer * c, half_h, r_outer * s]);
+        pos.push([r_outer * c, -half_h, r_outer * s]);
+        for _ in 0..4 {
+            nor.push(n);
+        }
+        if start_side {
+            idx.extend_from_slice(&[base, base + 2, base + 3, base, base + 3, base + 1]);
+        } else {
+            idx.extend_from_slice(&[base, base + 3, base + 2, base, base + 1, base + 3]);
+        }
+    };
+
+    add_wall(&mut positions, &mut normals, &mut indices, r_outer, true);
+    add_wall(&mut positions, &mut normals, &mut indices, r_inner, false);
+    add_cap(&mut positions, &mut normals, &mut indices, half_h, true);
+    add_cap(&mut positions, &mut normals, &mut indices, -half_h, false);
+    add_radial(
+        &mut positions,
+        &mut normals,
+        &mut indices,
+        start_angle,
+        true,
+    );
+    add_radial(
+        &mut positions,
+        &mut normals,
+        &mut indices,
+        start_angle + sweep_angle,
+        false,
+    );
 
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -233,8 +254,8 @@ fn animate_rotor(
     }
 
     // Synchronous speed: mech_angle = elec_angle / p
-    // We update all rotor instances
+    // Negative angle to match user direction preference.
     for mut transform in &mut query {
-        transform.rotation = Quat::from_rotation_y(state.angle / p);
+        transform.rotation = Quat::from_rotation_y(-state.angle / p - PI / 6.0);
     }
 }
