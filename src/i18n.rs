@@ -115,6 +115,9 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "phase_group_label") => "Grupo de fase",
         (Language::En, "phase_group_label") => "Phase group",
 
+        (Language::PtBr, "show_rotor") => "Mostrar rotor",
+        (Language::En, "show_rotor") => "Show rotor",
+
         _ => panic!("Invalid key: {}", key),
     }
 }

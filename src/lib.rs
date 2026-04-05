@@ -4,6 +4,7 @@ pub mod eletrical;
 pub mod i18n;
 pub mod mmf_field;
 pub mod phase;
+pub mod rotor;
 pub mod setup;
 pub mod stator;
 pub mod ui;
@@ -37,6 +38,7 @@ pub fn main() {
         .add_plugins(eletrical::EletricalPlugin)
         .add_plugins(vectors::MmfVectorsPlugin)
         .add_plugins(mmf_field::render::MmfFieldRenderPlugin)
+        .add_plugins(rotor::render::RotorPlugin)
         .init_resource::<config::MotorConfig>()
         .add_message::<config::MotorConfigChanged>()
         .add_systems(Startup, setup::setup)

@@ -46,6 +46,7 @@ pub struct MotorConfig {
     pub show_endwindings: bool,
     pub show_vectors: bool,
     pub show_fields: bool,
+    pub show_rotor: bool,
     pub mmf_field: MmfFieldConfig,
 }
 
@@ -59,6 +60,7 @@ impl MotorConfig {
         show_endwindings: false,
         show_vectors: false,
         show_fields: false,
+        show_rotor: false,
         mmf_field: MmfFieldConfig::MIN,
     };
 
@@ -71,6 +73,7 @@ impl MotorConfig {
         show_endwindings: true,
         show_vectors: true,
         show_fields: true,
+        show_rotor: true,
         mmf_field: MmfFieldConfig::MAX,
     };
 }
@@ -90,6 +93,7 @@ impl Default for MotorConfig {
             show_endwindings: true,
             show_vectors: true,
             show_fields: true,
+            show_rotor: true,
             mmf_field: MmfFieldConfig::default(),
         }
     }
@@ -98,6 +102,7 @@ impl Default for MotorConfig {
 // Geometry constants
 pub const STATOR_OUTER_RADIUS: f32 = 3.0;
 pub const STATOR_BORE_RADIUS: f32 = 2.0;
+pub const ROTOR_RADIUS: f32 = 1.95;
 pub const SLOT_DEPTH: f32 = 0.6;
 pub const STATOR_HEIGHT: f32 = 2.0;
 

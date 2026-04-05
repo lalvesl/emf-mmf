@@ -176,6 +176,9 @@ fn ui_panel(
                 if crate::mmf_field::ui::mmf_ui(ui, &mut config, &lang) {
                     changed = true;
                 }
+                if crate::rotor::ui::rotor_ui(ui, &mut config, &lang) {
+                    changed = true;
+                }
                 if ui
                     .checkbox(&mut config.show_vectors, t(&lang, "show_vectors"))
                     .changed()
