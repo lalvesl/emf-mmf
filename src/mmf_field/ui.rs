@@ -43,6 +43,23 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Language) -> b
                 ui.label(letter.to_string()).on_hover_text(&phase_name);
             });
         }
+
+        ui.add_space(4.0);
+        ui.label(t(lang, "mmf_gradient_intensity"));
+        if ui
+            .add(
+                egui::Slider::new(
+                    &mut config.mmf_field.gradient_intensity,
+                    0.5..=8.0,
+                )
+                .step_by(0.1)
+                .text("γ"),
+            )
+            .on_hover_text(t(lang, "mmf_gradient_intensity_hover"))
+            .changed()
+        {
+            changed = true;
+        }
     }
 
     changed
