@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
 
 use crate::config::{MotorConfig, MotorConfigChanged};
-use crate::eletrical::ElectricalState;
+use crate::electrical::ElectricalState;
 
 pub struct MmfVectorsPlugin;
 

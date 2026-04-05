@@ -1,5 +1,5 @@
 use crate::config::{MotorConfig, MotorConfigChanged, ROTOR_RADIUS, STATOR_HEIGHT};
-use crate::eletrical::ElectricalState;
+use crate::electrical::ElectricalState;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::Indices;
 use bevy::prelude::*;

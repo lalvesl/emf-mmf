@@ -1,6 +1,6 @@
 pub mod camera;
 pub mod config;
-pub mod eletrical;
+pub mod electrical;
 pub mod i18n;
 pub mod mmf_field;
 pub mod phase;
@@ -35,7 +35,7 @@ pub fn main() {
     App::new()
         .add_plugins(plugins)
         .add_plugins(ui::UiPlugin)
-        .add_plugins(eletrical::EletricalPlugin)
+        .add_plugins(electrical::EletricalPlugin)
         .add_plugins(vectors::MmfVectorsPlugin)
         .add_plugins(mmf_field::render::MmfFieldRenderPlugin)
         .add_plugins(rotor::render::RotorPlugin)

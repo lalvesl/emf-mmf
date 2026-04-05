@@ -6,7 +6,7 @@ use bevy::render::render_resource::PrimitiveTopology;
 use std::f32::consts::{PI, TAU};
 
 use crate::config::{MotorConfig, MotorConfigChanged, STATOR_BORE_RADIUS, STATOR_HEIGHT};
-use crate::eletrical::ElectricalState;
+use crate::electrical::ElectricalState;
 
 // ─── Plugin ──────────────────────────────────────────────────────────────────
 
@@ -192,7 +192,7 @@ fn animate_field(
 
         // Compute instantaneous current for this phase
         let phase_shift_elec = sector.phase as f32 * alpha_m;
-        let current = (state.angle - phase_shift_elec).cos();
+        let current = (state.angle - phase_shift_elec).cos().powi(3);
 
         // Pole alternation: every other pole inverts the field direction
         let mmf_amplitude = current * if sector.pole % 2 == 0 { 1.0 } else { -1.0 };
