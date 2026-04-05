@@ -3,6 +3,7 @@ use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 
 use crate::config::{MotorConfig, MotorConfigChanged};
 use crate::i18n::{Language, t};
+use crate::phase;
 
 pub struct UiPlugin;
 
@@ -108,13 +109,8 @@ fn ui_panel(
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
                     for i in 0..config.phases {
-                        let color: bevy::color::Srgba = crate::colors::phase_color(i).into();
-                        let egui_color = egui::Color32::from_rgb(
-                            (color.red * 255.0) as u8,
-                            (color.green * 255.0) as u8,
-                            (color.blue * 255.0) as u8,
-                        );
-                        let letter = (b'A' + i as u8) as char;
+                        let egui_color = phase::colors::phase_color_egui(i);
+                        let letter = phase::letter::phase_letter(i);
 
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 4.0;
@@ -175,6 +171,9 @@ fn ui_panel(
                     changed = true;
                 }
                 if crate::winding::ui::winding_ui(ui, &mut config, &lang) {
+                    changed = true;
+                }
+                if crate::mmf_field::ui::mmf_ui(ui, &mut config, &lang) {
                     changed = true;
                 }
                 if ui
