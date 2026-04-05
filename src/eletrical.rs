@@ -119,7 +119,7 @@ fn ui_electrical_waves(
                 let height = rect.height() / 2.0;
 
                 for phase in 0..m {
-                    let color_bevy = crate::colors::phase_color(phase);
+                    let color_bevy = crate::phase::colors::phase_color(phase);
                     let srgba: bevy::color::Srgba = color_bevy.into();
                     let color_egui = egui::Color32::from_rgba_unmultiplied(
                         (srgba.red * 255.0) as u8,
