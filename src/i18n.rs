@@ -96,6 +96,12 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "total_poles") => "Total de polos",
         (Language::En, "total_poles") => "Total poles",
 
+        (Language::PtBr, "show_mmf_field") => "Mostrar campo FMM",
+        (Language::En, "show_mmf_field") => "Show MMF field",
+
+        (Language::PtBr, "toggle_mmf_field_hover") => "Alternar visibilidade do campo FMM",
+        (Language::En, "toggle_mmf_field_hover") => "Toggle visibility of MMF field",
+
         _ => panic!("Invalid key: {}", key),
     }
 }
