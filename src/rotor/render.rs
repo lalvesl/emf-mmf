@@ -253,9 +253,31 @@ fn animate_rotor(
         return;
     }
 
-    // Synchronous speed: mech_angle = elec_angle / p
-    // Negative angle to match user direction preference.
+    // --- Synchronization with MMF Vectors ---
+    // The Peak of the Resultant MMF field rotates at state.angle / p.
+    // We calculate the mechanical offset required to align the Rotor North pole
+    // with that peak.
+
+    let n = config.groove_count as f32;
+    let m = config.phases as f32;
+    let q = n / (2.0 * p * m);
+    let pitch = crate::winding::coil_pitch(&config) as f32;
+    let alpha = (p * TAU) / n;
+
+    // Magnetic axis of Phase A at state.angle = 0 (same logic as mmf.rs)
+    let offset_elec = (q - 1.0 + pitch) / 2.0 * alpha;
+    let offset_mech = (TAU / n) * 0.75;
+    let mmf_peak_axis_0 = (offset_elec / p) + offset_mech;
+
+    // The center of the rotor's first North pole in its local coordinate system
+    let rotor_pole_width = TAU / (2.0 * p);
+    let rotor_pole_0_center_local = rotor_pole_width / 2.0; // i.e. PI / (2.0 * p)
+
+    // We want: rotor_pole_0_center_local + rotation_offset = mmf_peak_axis_0
+    let rotation_offset = mmf_peak_axis_0 - rotor_pole_0_center_local;
+
+    // Apply rotation (CCW direction to match vectors)
     for mut transform in &mut query {
-        transform.rotation = Quat::from_rotation_y(-state.angle / p - PI / 6.0);
+        transform.rotation = Quat::from_rotation_y(-(state.angle / p + rotation_offset));
     }
 }
