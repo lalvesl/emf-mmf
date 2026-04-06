@@ -49,7 +49,7 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Language) -> b
         if ui
             .add(
                 egui::Slider::new(&mut config.mmf_field.gradient_intensity, 10.0..=10000.0)
-                    .step_by(100.0)
+                    .step_by(10.0)
                     .text("γ"),
             )
             .on_hover_text(t(lang, "mmf_gradient_intensity_hover"))
