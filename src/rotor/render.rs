@@ -151,9 +151,9 @@ fn build_rotor_sector_mesh(
         for i in 0..segments {
             let b = base + i * 2;
             if outward {
-                idx.extend_from_slice(&[b, b + 1, b + 3, b, b + 3, b + 2]);
-            } else {
                 idx.extend_from_slice(&[b, b + 3, b + 1, b, b + 2, b + 3]);
+            } else {
+                idx.extend_from_slice(&[b, b + 1, b + 3, b, b + 3, b + 2]);
             }
         }
     };
@@ -204,9 +204,9 @@ fn build_rotor_sector_mesh(
             nor.push(n);
         }
         if start_side {
-            idx.extend_from_slice(&[base, base + 2, base + 3, base, base + 3, base + 1]);
-        } else {
             idx.extend_from_slice(&[base, base + 3, base + 2, base, base + 1, base + 3]);
+        } else {
+            idx.extend_from_slice(&[base, base + 2, base + 3, base, base + 3, base + 1]);
         }
     };
 
