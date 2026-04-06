@@ -83,7 +83,7 @@ fn regenerate_field(
     // One coil group spans `q` slots, so in electrical radians it is `q * alpha`.
     // In mechanical radians the span is `q * alpha / p`.
     let group_span_mech = (q * alpha) / p_f32; // full span
-    let half_span = group_span_mech * 0.5;
+    let half_span = PI; //group_span_mech * 0.5;
 
     let r_inner = 0.05; // tiny inner hole to avoid degenerate tris
     let r_outer = STATOR_BORE_RADIUS * 0.97; // just inside the bore surface
