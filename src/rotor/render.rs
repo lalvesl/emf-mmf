@@ -4,7 +4,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::Indices;
 use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::TAU;
 
 pub struct RotorPlugin;
 

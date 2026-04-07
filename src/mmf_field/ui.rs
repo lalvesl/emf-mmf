@@ -37,7 +37,7 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Language) -> b
                     ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
                 ui.painter().rect_filled(rect, 2.0, egui_color);
 
-                let phase_name = format!("{} {} ({})", t(&lang, "phase"), i + 1, letter);
+                let phase_name = format!("{} {} ({})", t(lang, "phase"), i + 1, letter);
                 response.on_hover_text(&phase_name);
 
                 ui.label(letter.to_string()).on_hover_text(&phase_name);
