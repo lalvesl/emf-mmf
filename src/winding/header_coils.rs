@@ -14,7 +14,7 @@ use crate::config::*;
 /// The arc sweeps from `a_from` to `a_to` (handling wrap-around), parabola-
 /// lifted by `y_offset`, at radius `r_mid`.  The cross-section is a square with
 /// side `wire_size` approximated by `cross_sides` triangles.
-fn build_arc_tube_mesh(
+struct ArcTubeParams {
     a_from: f32,
     a_diff: f32,
     r_mid: f32,
@@ -23,7 +23,17 @@ fn build_arc_tube_mesh(
     wire_size: f32,
     arc_segments: usize,
     cross_sides: usize,
-) -> Mesh {
+}
+
+fn build_arc_tube_mesh(params: ArcTubeParams) -> Mesh {
+    let a_from = params.a_from;
+    let a_diff = params.a_diff;
+    let r_mid = params.r_mid;
+    let y_base = params.y_base;
+    let y_offset = params.y_offset;
+    let wire_size = params.wire_size;
+    let arc_segments = params.arc_segments;
+    let cross_sides = params.cross_sides;
     // Centre-line points + Frenet frames
     let n = arc_segments + 1;
     let mut centers: Vec<Vec3> = Vec::with_capacity(n);
@@ -79,13 +89,10 @@ fn build_arc_tube_mesh(
                 let rotation = Quat::from_axis_angle(rot_axis.normalize(), sin_a.asin());
                 prev_up = rotation * prev_up;
             }
-            prev_up = prev_up
-                .reject_from(tang)
-                .normalize_or_zero()
-                .max_element()
-                .is_finite()
-                .then_some(prev_up.reject_from(tang).normalize_or_zero())
-                .unwrap_or(prev_up);
+            let rejected = prev_up.reject_from(tang).normalize_or_zero();
+            if rejected.is_finite() {
+                prev_up = rejected;
+            }
         }
         let right = tang.cross(prev_up).normalize_or_zero();
         let up = right.cross(tang).normalize_or_zero();
@@ -215,16 +222,16 @@ pub fn render_header_coils(
         let y_base_bot = -half_h - 0.05;
 
         // Top endwinding — one entity with one merged tube mesh
-        let mesh_top = build_arc_tube_mesh(
+        let mesh_top = build_arc_tube_mesh(ArcTubeParams {
             a_from,
             a_diff,
             r_mid,
-            y_base_top,
-            y_offset_top,
+            y_base: y_base_top,
+            y_offset: y_offset_top,
             wire_size,
             arc_segments,
             cross_sides,
-        );
+        });
         commands.spawn((
             Mesh3d(meshes.add(mesh_top)),
             MeshMaterial3d(mat.clone()),
@@ -233,16 +240,16 @@ pub fn render_header_coils(
         ));
 
         // Bottom endwinding — one entity with one merged tube mesh
-        let mesh_bot = build_arc_tube_mesh(
+        let mesh_bot = build_arc_tube_mesh(ArcTubeParams {
             a_from,
             a_diff,
             r_mid,
-            y_base_bot,
-            y_offset_bot,
+            y_base: y_base_bot,
+            y_offset: y_offset_bot,
             wire_size,
             arc_segments,
             cross_sides,
-        );
+        });
         commands.spawn((
             Mesh3d(meshes.add(mesh_bot)),
             MeshMaterial3d(mat),

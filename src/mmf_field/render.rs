@@ -108,7 +108,7 @@ fn regenerate_field(
             let color_srgba: bevy::color::Srgba = crate::phase::colors::phase_color(phase).into();
             let base_color = [color_srgba.red, color_srgba.green, color_srgba.blue, 1.0];
 
-            let mesh = build_sector_mesh(
+            let mesh = build_sector_mesh(SectorMeshParams {
                 r_inner,
                 r_outer,
                 y_bot,
@@ -117,9 +117,9 @@ fn regenerate_field(
                 half_span,
                 segments,
                 gradient_intensity,
-                1.0, // amplitude — will be updated every frame in animate_field
+                amplitude: 1.0, // amplitude — will be updated every frame in animate_field
                 base_color,
-            );
+            });
 
             let material = materials.add(StandardMaterial {
                 base_color: Color::WHITE,
@@ -229,7 +229,7 @@ fn animate_field(
 /// The gradient alpha at each vertex is:
 ///   `alpha = amplitude × (cos(delta / half_span × π/2) ^ gamma).max(0)`
 /// where `delta` is the angular deviation from the axis.
-fn build_sector_mesh(
+struct SectorMeshParams {
     r_inner: f32,
     r_outer: f32,
     y_bot: f32,
@@ -240,7 +240,19 @@ fn build_sector_mesh(
     gradient_intensity: f32,
     amplitude: f32,
     base_color: [f32; 4],
-) -> Mesh {
+}
+
+fn build_sector_mesh(params: SectorMeshParams) -> Mesh {
+    let r_inner = params.r_inner;
+    let r_outer = params.r_outer;
+    let y_bot = params.y_bot;
+    let y_top = params.y_top;
+    let axis_angle = params.axis_angle;
+    let half_span = params.half_span;
+    let segments = params.segments;
+    let gradient_intensity = params.gradient_intensity;
+    let amplitude = params.amplitude;
+    let base_color = params.base_color;
     let vertex_count_ring = (segments + 1) as usize;
     let total_verts =
         // top cap:   (segs+1) inner + (segs+1) outer
