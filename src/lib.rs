@@ -10,6 +10,7 @@ pub mod stator;
 pub mod ui;
 pub mod vectors;
 pub mod winding;
+pub mod winding_scheme;
 
 use bevy::prelude::*;
 
@@ -39,6 +40,7 @@ pub fn main() {
         .add_plugins(vectors::MmfVectorsPlugin)
         .add_plugins(mmf_field::render::MmfFieldRenderPlugin)
         .add_plugins(rotor::render::RotorPlugin)
+        .add_plugins(winding_scheme::render::WindingSchemePlugin)
         .init_resource::<config::MotorConfig>()
         .add_message::<config::MotorConfigChanged>()
         .add_systems(Startup, setup::setup)
