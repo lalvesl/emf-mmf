@@ -99,7 +99,7 @@
       in
       {
         devShells = {
-          default = pkgs.mkShell {
+          unstable = pkgs.mkShell {
             nativeBuildInputs = with pkgs; [
               pkg-config
               lld
@@ -134,7 +134,7 @@
             CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
           };
 
-          stable = pkgs.mkShell {
+          default = pkgs.mkShell {
             nativeBuildInputs = with pkgs; [
               pkg-config
               lld
