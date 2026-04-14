@@ -118,6 +118,16 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "show_rotor") => "Mostrar rotor",
         (Language::En, "show_rotor") => "Show rotor",
 
+        (Language::PtBr, "show_winding_scheme") => "Mostrar Esquema de Enrolamento",
+        (Language::En, "show_winding_scheme") => "Show Winding Scheme",
+
+        (Language::PtBr, "show_winding_scheme_hover") => {
+            "Abre uma janela com o diagrama de enrolamento e as formas de onda da FMM"
+        }
+        (Language::En, "show_winding_scheme_hover") => {
+            "Opens a window with the winding diagram and MMF waveforms"
+        }
+
         _ => panic!("Invalid key: {}", key),
     }
 }
