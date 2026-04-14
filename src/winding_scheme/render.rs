@@ -6,6 +6,7 @@ use crate::config::MotorConfig;
 use crate::electrical::ElectricalState;
 use crate::phase;
 use crate::winding::{Direction, compute_winding};
+use crate::i18n::{self, Language};
 
 // ─── Plugin ──────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ fn winding_scheme_window(
     mut contexts: EguiContexts,
     config: Res<MotorConfig>,
     state: Res<ElectricalState>,
+    lang: Res<Language>,
 ) {
     if !config.show_winding_scheme {
         return;
@@ -37,7 +39,7 @@ fn winding_scheme_window(
         return;
     };
 
-    egui::Window::new("Winding Scheme")
+    egui::Window::new(i18n::t(&lang, "winding_scheme_title"))
         .id(egui::Id::new("winding_scheme_window"))
         .default_width(620.0)
         .min_width(400.0)
@@ -46,26 +48,26 @@ fn winding_scheme_window(
             let assignments = compute_winding(&config);
 
             // ── Top panel: conductor layout ─────────────────────────────────
-            ui.label(egui::RichText::new("Winding Diagram").strong());
+            ui.label(egui::RichText::new(i18n::t(&lang, "winding_diagram")).strong());
             let conductor_panel_height = 90.0_f32;
             let (rect_top, _) = ui.allocate_exact_size(
                 egui::vec2(ui.available_width(), conductor_panel_height),
                 egui::Sense::hover(),
             );
-            draw_conductor_panel(ui, rect_top, &config, &assignments, state.angle);
+            draw_conductor_panel(ui, rect_top, &config, &assignments, state.angle, &lang);
 
             ui.add_space(4.0);
             ui.separator();
             ui.add_space(4.0);
 
             // ── Bottom panel: MMF waveforms ─────────────────────────────────
-            ui.label(egui::RichText::new("Winding Function & MMF").strong());
+            ui.label(egui::RichText::new(i18n::t(&lang, "winding_function_mmf")).strong());
             let waveform_panel_height = 180.0_f32;
             let (rect_bot, _) = ui.allocate_exact_size(
                 egui::vec2(ui.available_width(), waveform_panel_height),
                 egui::Sense::hover(),
             );
-            draw_mmf_panel(ui, rect_bot, &config, &assignments, state.angle);
+            draw_mmf_panel(ui, rect_bot, &config, &assignments, state.angle, &lang);
         });
 }
 
@@ -77,6 +79,7 @@ fn draw_conductor_panel(
     config: &MotorConfig,
     assignments: &[Option<crate::winding::SlotAssignment>],
     _angle: f32,
+    lang: &Language,
 ) {
     let painter = ui.painter_at(rect);
     let n = config.groove_count;
@@ -194,6 +197,7 @@ fn draw_mmf_panel(
     config: &MotorConfig,
     assignments: &[Option<crate::winding::SlotAssignment>],
     elec_angle: f32,
+    lang: &Language,
 ) {
     let painter = ui.painter_at(rect);
     let n = config.groove_count;
@@ -384,7 +388,7 @@ fn draw_mmf_panel(
     painter.text(
         egui::pos2(plot_rect.center().x, rect.bottom() - 4.0),
         egui::Align2::CENTER_CENTER,
-        "mechanical angle αs (rad)",
+        i18n::t(lang, "mechanical_angle"),
         egui::FontId::proportional(9.0),
         egui::Color32::from_rgb(130, 130, 150),
     );
@@ -397,7 +401,8 @@ fn draw_mmf_panel(
         for k in 0..m {
             let col = phase::colors::phase_color_egui(k);
             let letter = crate::phase::letter::phase_letter(k);
-            let label = format!("{}-phase WF", letter);
+            let raw_label = i18n::t(lang, "phase_wf");
+            let label = raw_label.replace("{}", &letter.to_string());
             painter.line_segment(
                 [egui::pos2(lx, ly), egui::pos2(lx + 14.0, ly)],
                 egui::Stroke::new(1.5, col),
@@ -420,7 +425,7 @@ fn draw_mmf_panel(
         painter.text(
             egui::pos2(lx + 16.0, ly),
             egui::Align2::LEFT_CENTER,
-            "total mmf",
+            i18n::t(lang, "total_mmf"),
             egui::FontId::proportional(8.5),
             green,
         );

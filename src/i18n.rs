@@ -128,6 +128,24 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
             "Opens a window with the winding diagram and MMF waveforms"
         }
 
+        (Language::PtBr, "winding_scheme_title") => "Esquema de Enrolamento",
+        (Language::En, "winding_scheme_title") => "Winding Scheme",
+
+        (Language::PtBr, "winding_diagram") => "Diagrama de Enrolamento",
+        (Language::En, "winding_diagram") => "Winding Diagram",
+
+        (Language::PtBr, "winding_function_mmf") => "Função de Enrolamento & FMM",
+        (Language::En, "winding_function_mmf") => "Winding Function & MMF",
+
+        (Language::PtBr, "mechanical_angle") => "ângulo mecânico αs (rad)",
+        (Language::En, "mechanical_angle") => "mechanical angle αs (rad)",
+
+        (Language::PtBr, "phase_wf") => "fase-{} WF",
+        (Language::En, "phase_wf") => "{}-phase WF",
+
+        (Language::PtBr, "total_mmf") => "fmm total",
+        (Language::En, "total_mmf") => "total mmf",
+
         _ => panic!("Invalid key: {}", key),
     }
 }
