@@ -4,11 +4,9 @@ use std::f32::consts::TAU;
 
 use crate::config::MotorConfig;
 use crate::electrical::ElectricalState;
+use crate::i18n::{self, Language};
 use crate::phase;
 use crate::winding::{Direction, compute_winding};
-use crate::i18n::{self, Language};
-
-// ─── Plugin ──────────────────────────────────────────────────────────────────
 
 pub struct WindingSchemePlugin;
 
@@ -18,12 +16,8 @@ impl Plugin for WindingSchemePlugin {
     }
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 /// How many angular samples to use when drawing the MMF step waveforms.
 const WAVEFORM_SAMPLES: usize = 720;
-
-// ─── Window system ───────────────────────────────────────────────────────────
 
 fn winding_scheme_window(
     mut contexts: EguiContexts,
@@ -70,8 +64,6 @@ fn winding_scheme_window(
             draw_mmf_panel(ui, rect_bot, &config, &assignments, state.angle, &lang);
         });
 }
-
-// ─── Conductor layout (top panel) ────────────────────────────────────────────
 
 fn draw_conductor_panel(
     ui: &egui::Ui,
@@ -138,11 +130,7 @@ fn draw_conductor_panel(
         let base_color = phase::colors::phase_color_egui(assign.phase);
 
         // Circle outline
-        painter.circle_stroke(
-            egui::pos2(x, y),
-            sym_r,
-            egui::Stroke::new(1.5, base_color),
-        );
+        painter.circle_stroke(egui::pos2(x, y), sym_r, egui::Stroke::new(1.5, base_color));
 
         match assign.direction {
             // Current coming OUT of the page: ⊕ (dot)
@@ -331,7 +319,10 @@ fn draw_mmf_panel(
     for tick_frac in [0.0f32, 0.25, 0.5, 0.75, 1.0] {
         let x = plot_rect.left() + tick_frac * plot_rect.width();
         painter.line_segment(
-            [egui::pos2(x, plot_rect.top()), egui::pos2(x, plot_rect.bottom())],
+            [
+                egui::pos2(x, plot_rect.top()),
+                egui::pos2(x, plot_rect.bottom()),
+            ],
             egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 40, 55)),
         );
         let label = match (tick_frac * 8.0) as u32 {
