@@ -131,7 +131,7 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "winding_scheme_title") => "Esquema de Enrolamento",
         (Language::En, "winding_scheme_title") => "Winding Scheme",
 
-        (Language::PtBr, "winding_diagram") => "Diagrama de Enrolamento",
+        (Language::PtBr, "winding_diagram") => "Diagrama do Enrolamento",
         (Language::En, "winding_diagram") => "Winding Diagram",
 
         (Language::PtBr, "winding_function_mmf") => "Função de Enrolamento & FMM",

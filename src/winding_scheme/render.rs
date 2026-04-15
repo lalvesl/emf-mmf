@@ -71,13 +71,13 @@ fn draw_conductor_panel(
     config: &MotorConfig,
     assignments: &[Option<crate::winding::SlotAssignment>],
     _angle: f32,
-    lang: &Language,
+    _lang: &Language,
 ) {
     let painter = ui.painter_at(rect);
     let n = config.groove_count;
 
     // Background
-    painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 20, 28));
+    // painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(255, 20, 28));
 
     // Draw a subtle arc representing the stator bore
     let cx = rect.center().x;
@@ -88,13 +88,13 @@ fn draw_conductor_panel(
     let sym_r = (slot_step * 0.38).min(12.0);
 
     // Axis line
-    painter.line_segment(
-        [
-            egui::pos2(rect.left() + padding, cy),
-            egui::pos2(rect.right() - padding, cy),
-        ],
-        egui::Stroke::new(1.0, egui::Color32::from_rgb(80, 80, 100)),
-    );
+    // painter.line_segment(
+    //     [
+    //         egui::pos2(rect.left() + padding, cy),
+    //         egui::pos2(rect.right() - padding, cy),
+    //     ],
+    //     egui::Stroke::new(1.0, egui::Color32::from_rgb(80, 80, 100)),
+    // );
 
     // Tick marks and slot numbers
     for s in 0..n {
@@ -295,7 +295,7 @@ fn draw_mmf_panel(
     };
 
     // Background grid
-    painter.rect_filled(plot_rect, 2.0, egui::Color32::from_rgb(18, 18, 26));
+    // painter.rect_filled(plot_rect, 2.0, egui::Color32::from_rgb(18, 18, 26));
     painter.rect_stroke(
         plot_rect,
         2.0,
