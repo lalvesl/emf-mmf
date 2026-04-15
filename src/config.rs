@@ -47,6 +47,7 @@ pub struct MotorConfig {
     pub show_vectors: bool,
     pub show_fields: bool,
     pub show_rotor: bool,
+    pub show_winding_scheme: bool,
     pub mmf_field: MmfFieldConfig,
 }
 
@@ -61,6 +62,7 @@ impl MotorConfig {
         show_vectors: false,
         show_fields: false,
         show_rotor: false,
+        show_winding_scheme: false,
         mmf_field: MmfFieldConfig::MIN,
     };
 
@@ -74,6 +76,7 @@ impl MotorConfig {
         show_vectors: true,
         show_fields: true,
         show_rotor: true,
+        show_winding_scheme: true,
         mmf_field: MmfFieldConfig::MAX,
     };
 }
@@ -94,6 +97,7 @@ impl Default for MotorConfig {
             show_vectors: true,
             show_fields: true,
             show_rotor: true,
+            show_winding_scheme: true,
             mmf_field: MmfFieldConfig::default(),
         }
     }
