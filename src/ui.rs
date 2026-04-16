@@ -179,9 +179,9 @@ fn ui_panel(
                 if crate::rotor::ui::rotor_ui(ui, &mut config, &lang) {
                     changed = true;
                 }
-                // if crate::winding_scheme::ui::winding_scheme_ui(ui, &mut config, &lang) {
-                //     changed = true;
-                // }
+                if crate::winding_scheme::ui::winding_scheme_ui(ui, &mut config, &lang) {
+                    changed = true;
+                }
                 if ui
                     .checkbox(&mut config.show_vectors, t(&lang, "show_vectors"))
                     .changed()

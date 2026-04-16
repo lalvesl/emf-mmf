@@ -42,7 +42,7 @@ fn winding_scheme_window(
             let assignments = compute_winding(&config);
 
             // ── Top panel: conductor layout ─────────────────────────────────
-            ui.label(egui::RichText::new(i18n::t(&lang, "winding_diagram")).strong());
+            // ui.label(egui::RichText::new(i18n::t(&lang, "winding_diagram")).strong());
             let conductor_panel_height = 90.0_f32;
             let (rect_top, _) = ui.allocate_exact_size(
                 egui::vec2(ui.available_width(), conductor_panel_height),
@@ -105,15 +105,15 @@ fn draw_conductor_panel(
             egui::Stroke::new(1.0, egui::Color32::from_rgb(60, 60, 80)),
         );
         // slot index label (only every q or every few slots to avoid clutter)
-        if n <= 36 || s % (n / 12).max(1) == 0 {
-            painter.text(
-                egui::pos2(x, tick_y + 10.0),
-                egui::Align2::CENTER_CENTER,
-                (s + 1).to_string(),
-                egui::FontId::proportional(8.0),
-                egui::Color32::from_rgb(100, 100, 120),
-            );
-        }
+        // if n <= 36 || s % (n / 12).max(1) == 0 {
+        //     painter.text(
+        //         egui::pos2(x, tick_y + 10.0),
+        //         egui::Align2::CENTER_CENTER,
+        //         (s + 1).to_string(),
+        //         egui::FontId::proportional(8.0),
+        //         egui::Color32::from_rgb(100, 100, 120),
+        //     );
+        // }
     }
 
     // Draw conductor symbols
