@@ -220,10 +220,10 @@ fn draw_mmf_panel(
 
         // Each conductor contributes a step at θ_s
         // The winding function at sample i is the cumulative sum of conductors for θ < θ_sample.
-        for i in 0..WAVEFORM_SAMPLES {
+        for (i, sample) in wf[assign.phase].iter_mut().enumerate().take(WAVEFORM_SAMPLES) {
             let theta = i as f32 / WAVEFORM_SAMPLES as f32 * TAU;
             if theta >= theta_s {
-                wf[assign.phase][i] += sign;
+                *sample += sign;
             }
         }
     }
@@ -354,11 +354,11 @@ fn draw_mmf_panel(
         );
     }
 
-    for k in 0..m {
+    for (k, mmf) in phase_mmf.iter().enumerate().take(m) {
         let color = phase::colors::phase_color_egui(k);
         draw_polyline(
             &painter,
-            |i| to_screen(i, phase_mmf[k].get(i).copied().unwrap_or(0.0)),
+            |i| to_screen(i, mmf.get(i).copied().unwrap_or(0.0)),
             WAVEFORM_SAMPLES,
             color,
             1.0,
