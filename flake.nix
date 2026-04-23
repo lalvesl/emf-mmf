@@ -53,7 +53,7 @@
           ];
         };
 
-        rustStable = pkgs.rust-bin.stable."1.94.0".default.override {
+        rustStable = pkgs.rust-bin.stable."1.94.1".default.override {
           extensions = [
             "rust-src"
             "rust-analyzer"
@@ -404,8 +404,6 @@
             ''}/bin/run-dev";
           };
 
-
-
           web = {
             type = "app";
             program = "${pkgs.writeShellScriptBin "run-web" ''
@@ -416,8 +414,6 @@
               ${pkgs.dioxus-cli}/bin/dx serve --platform web --features web
             ''}/bin/run-web";
           };
-
-
 
           build-web = {
             type = "app";
