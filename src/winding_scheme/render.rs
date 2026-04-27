@@ -192,7 +192,7 @@ fn draw_mmf_panel(
     let m = config.phases;
 
     // Background
-    painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 20, 28));
+    // painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 20, 28));
 
     // ── Compute winding-function / MMF waveforms ─────────────────────────────
     // The winding function N_k(θ) for phase k is the sum of all conductors weighted by
@@ -220,7 +220,11 @@ fn draw_mmf_panel(
 
         // Each conductor contributes a step at θ_s
         // The winding function at sample i is the cumulative sum of conductors for θ < θ_sample.
-        for (i, sample) in wf[assign.phase].iter_mut().enumerate().take(WAVEFORM_SAMPLES) {
+        for (i, sample) in wf[assign.phase]
+            .iter_mut()
+            .enumerate()
+            .take(WAVEFORM_SAMPLES)
+        {
             let theta = i as f32 / WAVEFORM_SAMPLES as f32 * TAU;
             if theta >= theta_s {
                 *sample += sign;
