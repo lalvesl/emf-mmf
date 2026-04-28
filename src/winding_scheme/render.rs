@@ -192,7 +192,7 @@ fn draw_mmf_panel(
     let m = config.phases;
 
     // Background
-    // painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 20, 28));
+    painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 20, 28));
 
     // ── Compute winding-function / MMF waveforms ─────────────────────────────
     // The winding function N_k(θ) for phase k is the sum of all conductors weighted by
