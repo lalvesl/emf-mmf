@@ -37,7 +37,7 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Language) -> b
                     ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
                 ui.painter().rect_filled(rect, 2.0, egui_color);
 
-                let phase_name = format!("{} {} ({})", t(&lang, "phase"), i + 1, letter);
+                let phase_name = format!("{} {} ({})", t(lang, "phase"), i + 1, letter);
                 response.on_hover_text(&phase_name);
 
                 ui.label(letter.to_string()).on_hover_text(&phase_name);
@@ -48,12 +48,9 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Language) -> b
         ui.label(t(lang, "mmf_gradient_intensity"));
         if ui
             .add(
-                egui::Slider::new(
-                    &mut config.mmf_field.gradient_intensity,
-                    0.5..=8.0,
-                )
-                .step_by(0.1)
-                .text("γ"),
+                egui::Slider::new(&mut config.mmf_field.gradient_intensity, 10.0..=10000.0)
+                    .step_by(10.0)
+                    .text("γ"),
             )
             .on_hover_text(t(lang, "mmf_gradient_intensity_hover"))
             .changed()

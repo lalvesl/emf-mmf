@@ -99,7 +99,7 @@
       in
       {
         devShells = {
-          default = pkgs.mkShell {
+          unstable = pkgs.mkShell {
             nativeBuildInputs = with pkgs; [
               pkg-config
               lld
@@ -134,7 +134,7 @@
             CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
           };
 
-          stable = pkgs.mkShell {
+          default = pkgs.mkShell {
             nativeBuildInputs = with pkgs; [
               pkg-config
               lld
@@ -397,21 +397,27 @@
           default = {
             type = "app";
             program = "${pkgs.writeShellScriptBin "run-dev" ''
+              export PATH="${rustStable}/bin:${pkgs.pkg-config}/bin:${pkgs.lld}/bin:$PATH"
               export BEVY_ASSET_ROOT="."
-              export LD_LIBRARY_PATH="${libPath}:$LD_LIBRARY_PATH"
-              ${pkgs.dioxus-cli}/bin/dx serve --hot-patch --features bevy/hotpatching
+              export LD_LIBRARY_PATH="${libPath}:./target/debug:./target/debug/deps:./target/dx/emf-mmf/debug/linux/app:$LD_LIBRARY_PATH"
+              ${pkgs.dioxus-cli}/bin/dx serve --features hotpatching
             ''}/bin/run-dev";
           };
+
+
 
           web = {
             type = "app";
             program = "${pkgs.writeShellScriptBin "run-web" ''
+              export PATH="${rustStable}/bin:${pkgs.pkg-config}/bin:${pkgs.lld}/bin:$PATH"
               export CARGO_PROFILE_DEV_CODEGEN_BACKEND="llvm"
               export BEVY_ASSET_ROOT="./src"
               export LD_LIBRARY_PATH="${libPath}:$LD_LIBRARY_PATH"
               ${pkgs.dioxus-cli}/bin/dx serve --platform web --features web
             ''}/bin/run-web";
           };
+
+
 
           build-web = {
             type = "app";
