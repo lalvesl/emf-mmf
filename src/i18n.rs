@@ -105,6 +105,10 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "mmf_gradient_intensity") => "Intensidade do gradiente (γ)",
         (Language::En, "mmf_gradient_intensity") => "Gradient intensity (γ)",
 
+        (Language::PtBr, "mmf_result") => "Resultado",
+        (Language::En, "mmf_result") => "Result",
+
+
         (Language::PtBr, "mmf_gradient_intensity_hover") => {
             "Controla a concentração do gradiente de campo: valores maiores deixam o campo mais concentrado no eixo magnético"
         }
