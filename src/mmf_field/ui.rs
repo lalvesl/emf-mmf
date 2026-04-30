@@ -45,6 +45,27 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Language) -> b
         }
 
         ui.add_space(4.0);
+
+        // ── Result row ──────────────────────────────────────────────────────
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            if ui
+                .checkbox(&mut config.mmf_field.show_result, "")
+                .changed()
+            {
+                changed = true;
+            }
+
+            // White swatch to match the result mesh colour
+            let (rect, response) =
+                ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+            ui.painter().rect_filled(rect, 2.0, egui::Color32::WHITE);
+            let result_label = t(lang, "mmf_result");
+            response.on_hover_text(result_label);
+            ui.label(t(lang, "mmf_result")).on_hover_text(result_label);
+        });
+
+        ui.add_space(4.0);
         ui.label(t(lang, "mmf_gradient_intensity"));
         if ui
             .add(
