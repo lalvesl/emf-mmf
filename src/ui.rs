@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 
-use crate::config::{MotorConfig, MotorConfigChanged};
+use crate::config::{MotorConfig, MotorConfigChanged, MotorType};
 use crate::i18n::{Language, t};
 use crate::phase;
 
@@ -73,7 +73,61 @@ fn ui_panel(
                 });
 
                 ui.separator();
+                ui.add_space(4.0);
+
+                // Motor type tabs
+                ui.horizontal(|ui| {
+                    if ui
+                        .selectable_label(
+                            config.motor_type == MotorType::Dc,
+                            t(&lang, "motor_type_dc"),
+                        )
+                        .clicked()
+                        && config.motor_type != MotorType::Dc
+                    {
+                        config.motor_type = MotorType::Dc;
+                        changed = true;
+                    }
+                    if ui
+                        .selectable_label(
+                            config.motor_type == MotorType::Synchronous,
+                            t(&lang, "motor_type_sync"),
+                        )
+                        .clicked()
+                        && config.motor_type != MotorType::Synchronous
+                    {
+                        config.motor_type = MotorType::Synchronous;
+                        changed = true;
+                    }
+                    if ui
+                        .selectable_label(
+                            config.motor_type == MotorType::Async,
+                            t(&lang, "motor_type_async"),
+                        )
+                        .clicked()
+                        && config.motor_type != MotorType::Async
+                    {
+                        config.motor_type = MotorType::Async;
+                        changed = true;
+                    }
+                });
+                ui.separator();
                 ui.add_space(8.0);
+
+                if config.motor_type != MotorType::Async {
+                    let key = match config.motor_type {
+                        MotorType::Dc => "motor_type_dc_placeholder",
+                        MotorType::Synchronous => "motor_type_sync_placeholder",
+                        MotorType::Async => unreachable!(),
+                    };
+                    ui.label(t(&lang, key));
+                    ui.add_space(12.0);
+                    ui.separator();
+                    ui.add_space(4.0);
+                    ui.label(t(&lang, "rotate_hint"));
+                    ui.label(t(&lang, "zoom_hint"));
+                    return;
+                }
 
                 // Groove count
                 let mut grooves = config.groove_count as i32;

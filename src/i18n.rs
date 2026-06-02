@@ -12,6 +12,29 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "motor_config_btn") => "Config. Motor",
         (Language::En, "motor_config_btn") => "Motor Config",
 
+        (Language::PtBr, "motor_type_dc") => "Motor CC",
+        (Language::En, "motor_type_dc") => "DC Motor",
+
+        (Language::PtBr, "motor_type_sync") => "Motor Síncrono",
+        (Language::En, "motor_type_sync") => "Synchronous Motor",
+
+        (Language::PtBr, "motor_type_async") => "Motor Assíncrono",
+        (Language::En, "motor_type_async") => "Async Motor",
+
+        (Language::PtBr, "motor_type_dc_placeholder") => {
+            "Configuração do motor CC ainda não implementada."
+        }
+        (Language::En, "motor_type_dc_placeholder") => {
+            "DC motor configuration not yet implemented."
+        }
+
+        (Language::PtBr, "motor_type_sync_placeholder") => {
+            "Configuração do motor síncrono ainda não implementada."
+        }
+        (Language::En, "motor_type_sync_placeholder") => {
+            "Synchronous motor configuration not yet implemented."
+        }
+
         (Language::PtBr, "motor_config_heading") => "Configuração do Motor",
         (Language::En, "motor_config_heading") => "Motor Configuration",
 

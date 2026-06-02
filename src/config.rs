@@ -40,9 +40,18 @@ impl MmfFieldConfig {
     };
 }
 
+#[derive(Default, PartialEq, Eq, Clone, Copy, Debug)]
+pub enum MotorType {
+    Dc,
+    Synchronous,
+    #[default]
+    Async,
+}
+
 /// Motor winding configuration — user-adjustable parameters.
 #[derive(Resource, Clone, Debug)]
 pub struct MotorConfig {
+    pub motor_type: MotorType,
     pub groove_count: usize,
     pub phases: usize,
     pub short_pitched: bool,
@@ -58,6 +67,7 @@ pub struct MotorConfig {
 
 impl MotorConfig {
     pub const MIN: Self = Self {
+        motor_type: MotorType::Async,
         groove_count: 6,
         phases: 1,
         short_pitched: false,
@@ -72,6 +82,7 @@ impl MotorConfig {
     };
 
     pub const MAX: Self = Self {
+        motor_type: MotorType::Async,
         groove_count: 144,
         phases: 6,
         short_pitched: true,
@@ -93,6 +104,7 @@ pub struct MotorConfigChanged;
 impl Default for MotorConfig {
     fn default() -> Self {
         Self {
+            motor_type: MotorType::Async,
             groove_count: 24,
             phases: 3,
             short_pitched: false,
