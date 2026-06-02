@@ -59,7 +59,7 @@ pub struct MotorConfig {
 impl MotorConfig {
     pub const MIN: Self = Self {
         groove_count: 6,
-        phases: 1,
+        phases: 2,
         short_pitched: false,
         layers: 1,
         pole_pairs: 1,
@@ -73,7 +73,7 @@ impl MotorConfig {
 
     pub const MAX: Self = Self {
         groove_count: 144,
-        phases: 6,
+        phases: 10,
         short_pitched: true,
         layers: 2,
         pole_pairs: 6,

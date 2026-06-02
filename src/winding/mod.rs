@@ -132,7 +132,7 @@ pub fn regenerate_winding(
     // Pre-create phase materials
     let phase_mats: Vec<_> = (0..config.phases)
         .map(|p| {
-            let color = phase::colors::phase_color(p);
+            let color = phase::colors::phase_color(p, config.phases);
             materials.add(StandardMaterial {
                 base_color: color,
                 emissive: color.into(),
@@ -143,7 +143,7 @@ pub fn regenerate_winding(
 
     let phase_mats_opp: Vec<_> = (0..config.phases)
         .map(|p| {
-            let color = phase::colors::phase_color_opposite(p);
+            let color = phase::colors::phase_color_opposite(p, config.phases);
             materials.add(StandardMaterial {
                 base_color: color,
                 emissive: color.into(),

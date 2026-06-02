@@ -109,7 +109,7 @@ fn ui_panel(
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
                     for i in 0..config.phases {
-                        let egui_color = phase::colors::phase_color_egui(i);
+                        let egui_color = phase::colors::phase_color_egui(i, config.phases);
                         let letter = phase::letter::phase_letter(i);
 
                         ui.horizontal(|ui| {

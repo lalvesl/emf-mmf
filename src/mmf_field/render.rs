@@ -124,7 +124,7 @@ fn regenerate_field(
             let center_elec = start_elec + offset_elec;
             let axis_angle = (center_elec / p_f32) + offset_mech;
 
-            let color_srgba: bevy::color::Srgba = crate::phase::colors::phase_color(phase).into();
+            let color_srgba: bevy::color::Srgba = crate::phase::colors::phase_color(phase, m).into();
             let base_color = [color_srgba.red, color_srgba.green, color_srgba.blue, 1.0];
 
             let mesh = build_sector_mesh(SectorMeshParams {

@@ -127,7 +127,7 @@ fn draw_conductor_panel(
         // We draw the first assignment at y_top, second at y_bot if exists.
         let y = cy - sym_r * 2.8;
 
-        let base_color = phase::colors::phase_color_egui(assign.phase);
+        let base_color = phase::colors::phase_color_egui(assign.phase, config.phases);
 
         // Circle outline
         painter.circle_stroke(egui::pos2(x, y), sym_r, egui::Stroke::new(1.5, base_color));
@@ -158,7 +158,7 @@ fn draw_conductor_panel(
         let mut lx = rect.left() + padding;
         let ly = rect.top() + 12.0;
         for ph in 0..config.phases {
-            let col = phase::colors::phase_color_egui(ph);
+            let col = phase::colors::phase_color_egui(ph, config.phases);
             let letter = crate::phase::letter::phase_letter(ph);
 
             // small circle
@@ -359,7 +359,7 @@ fn draw_mmf_panel(
     }
 
     for (k, mmf) in phase_mmf.iter().enumerate().take(m) {
-        let color = phase::colors::phase_color_egui(k);
+        let color = phase::colors::phase_color_egui(k, m);
         draw_polyline(
             &painter,
             |i| to_screen(i, mmf.get(i).copied().unwrap_or(0.0)),
@@ -394,7 +394,7 @@ fn draw_mmf_panel(
         let ly = rect.top() + 6.0;
 
         for k in 0..m {
-            let col = phase::colors::phase_color_egui(k);
+            let col = phase::colors::phase_color_egui(k, m);
             let letter = crate::phase::letter::phase_letter(k);
             let raw_label = i18n::t(lang, "phase_wf");
             let label = raw_label.replace("{}", &letter.to_string());
