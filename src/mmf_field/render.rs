@@ -258,9 +258,9 @@ fn animate_field(
         let abs_amplitude = mmf_amplitude.abs();
 
         // Rebuild vertex colours for this sector
-        if let Some(mesh) = meshes.get_mut(&mesh3d.0) {
+        if let Some(mut mesh) = meshes.get_mut(&mesh3d.0) {
             recolor_sector_mesh(
-                mesh,
+                &mut mesh,
                 sector.axis_angle,
                 sector.half_angular_span,
                 sector.segments,
@@ -351,7 +351,7 @@ fn animate_result(
             (total / m as f32).abs().clamp(0.0, 1.0)
         };
 
-        let Some(mesh) = meshes.get_mut(&mesh3d.0) else {
+        let Some(mut mesh) = meshes.get_mut(&mesh3d.0) else {
             continue;
         };
 
