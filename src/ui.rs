@@ -11,7 +11,72 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(EguiPlugin::default())
             .init_resource::<Language>()
-            .add_systems(EguiPrimaryContextPass, ui_panel);
+            .init_resource::<PanelSpace>()
+            .configure_sets(
+                EguiPrimaryContextPass,
+                (PanelLayout::Reset, PanelLayout::Side, PanelLayout::Bottom).chain(),
+            )
+            .add_systems(
+                EguiPrimaryContextPass,
+                (
+                    reset_panel_space.in_set(PanelLayout::Reset),
+                    ui_panel.in_set(PanelLayout::Side),
+                ),
+            );
+    }
+}
+
+/// Screen space still free for docked panels this frame.
+///
+/// egui's `Panel` takes a `&mut Ui` and derives its area from that `Ui` alone,
+/// so two panels built on two independently-created viewport `Ui`s both claim
+/// the whole screen and overlap. This resource carries the leftover rect from
+/// one panel system to the next; [`PanelLayout`] fixes the order they run in.
+#[derive(Resource, Clone, Copy)]
+pub struct PanelSpace(pub egui::Rect);
+
+impl Default for PanelSpace {
+    fn default() -> Self {
+        Self(egui::Rect::NOTHING)
+    }
+}
+
+impl PanelSpace {
+    /// Build a `Ui` covering whatever space is still unclaimed.
+    pub fn ui(&self, ctx: &egui::Context, id: impl egui::AsId) -> egui::Ui {
+        egui::Ui::new(
+            ctx.clone(),
+            egui::Id::new(id),
+            egui::UiBuilder::new()
+                .layer_id(egui::LayerId::background())
+                .max_rect(self.0),
+        )
+    }
+
+    /// Hand what this panel left over to the panels that come after it.
+    ///
+    /// `Panel::show` advances the parent `Ui`'s cursor past the area it took,
+    /// so the parent's remaining rect is exactly the leftover space.
+    pub fn claim(&mut self, ui: &egui::Ui) {
+        self.0 = ui.available_rect_before_wrap();
+    }
+}
+
+/// Ordered stages for docked panels. Each stage claims from [`PanelSpace`], so
+/// a later stage only ever sees what the earlier ones left behind.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PanelLayout {
+    /// Restores the full viewport as available space.
+    Reset,
+    /// Panels docked to a side edge.
+    Side,
+    /// Panels docked below whatever the side panels left.
+    Bottom,
+}
+
+fn reset_panel_space(mut contexts: EguiContexts, mut space: ResMut<PanelSpace>) {
+    if let Ok(ctx) = contexts.ctx_mut() {
+        space.0 = ctx.viewport_rect();
     }
 }
 
@@ -20,6 +85,7 @@ fn ui_panel(
     mut config: ResMut<MotorConfig>,
     mut lang: ResMut<Language>,
     mut ev_writer: MessageWriter<MotorConfigChanged>,
+    mut space: ResMut<PanelSpace>,
     mut first_frame: Local<bool>,
     mut minimized: Local<bool>,
 ) {
@@ -27,19 +93,14 @@ fn ui_panel(
         return;
     };
 
-    let mut viewport_ui = egui::Ui::new(
-        ctx.clone(),
-        "ui_panel_viewport".into(),
-        egui::UiBuilder::new()
-            .layer_id(egui::LayerId::background())
-            .max_rect(ctx.viewport_rect()),
-    );
+    let mut viewport_ui = space.ui(ctx, "ui_panel_viewport");
 
-    let mut changed = false;
+    let mut geometry_changed = false;
+    let mut visibility_changed = false;
 
     // Trigger initial build
     if !*first_frame {
-        changed = true;
+        geometry_changed = true;
         *first_frame = true;
     }
 
@@ -86,34 +147,30 @@ fn ui_panel(
                 // Groove count
                 let mut grooves = config.groove_count as i32;
                 ui.label(format!("{} (S)", t(&lang, "grooves")));
-                if ui
-                    .add(egui::Slider::new(
-                        &mut grooves,
-                        (MotorConfig::MIN.groove_count as i32)
-                            ..=(MotorConfig::MAX.groove_count as i32),
-                    ))
-                    .changed()
-                {
+                let response = ui.add(egui::Slider::new(
+                    &mut grooves,
+                    (MotorConfig::MIN.groove_count as i32)
+                        ..=(MotorConfig::MAX.groove_count as i32),
+                ));
+                if response.changed() {
                     config.groove_count = grooves as usize;
                     clamp_config(&mut config);
-                    changed = true;
                 }
+                geometry_changed |= slider_settled(&response);
                 ui.add_space(4.0);
 
                 // Phases
                 let mut phases = config.phases as i32;
                 ui.label(format!("{} (m)", t(&lang, "phases")));
-                if ui
-                    .add(egui::Slider::new(
-                        &mut phases,
-                        (MotorConfig::MIN.phases as i32)..=(MotorConfig::MAX.phases as i32),
-                    ))
-                    .changed()
-                {
+                let response = ui.add(egui::Slider::new(
+                    &mut phases,
+                    (MotorConfig::MIN.phases as i32)..=(MotorConfig::MAX.phases as i32),
+                ));
+                if response.changed() {
                     config.phases = phases as usize;
                     clamp_config(&mut config);
-                    changed = true;
                 }
+                geometry_changed |= slider_settled(&response);
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
                     for i in 0..config.phases {
@@ -139,69 +196,49 @@ fn ui_panel(
                 // Poles
                 let mut poles = (config.pole_pairs * 2) as i32;
                 ui.label(format!("{}(P)", t(&lang, "poles")));
-                if ui
-                    .add(
-                        egui::Slider::new(
-                            &mut poles,
-                            (MotorConfig::MIN.pole_pairs as i32 * 2)
-                                ..=(MotorConfig::MAX.pole_pairs as i32 * 2),
-                        )
-                        .step_by(2.0),
+                let response = ui.add(
+                    egui::Slider::new(
+                        &mut poles,
+                        (MotorConfig::MIN.pole_pairs as i32 * 2)
+                            ..=(MotorConfig::MAX.pole_pairs as i32 * 2),
                     )
-                    .changed()
-                {
+                    .step_by(2.0),
+                );
+                if response.changed() {
                     config.pole_pairs = (poles / 2) as usize;
                     clamp_config(&mut config);
-                    changed = true;
                 }
+                geometry_changed |= slider_settled(&response);
                 ui.add_space(4.0);
 
                 // Layers
                 let mut layers = config.layers as i32;
                 ui.label(t(&lang, "layers"));
-                if ui
-                    .add(egui::Slider::new(
-                        &mut layers,
-                        (MotorConfig::MIN.layers as i32)..=(MotorConfig::MAX.layers as i32),
-                    ))
-                    .changed()
-                {
+                let response = ui.add(egui::Slider::new(
+                    &mut layers,
+                    (MotorConfig::MIN.layers as i32)..=(MotorConfig::MAX.layers as i32),
+                ));
+                if response.changed() {
                     config.layers = layers as usize;
-                    changed = true;
                 }
+                geometry_changed |= slider_settled(&response);
                 ui.add_space(4.0);
 
                 // Short-pitched
-                if ui
+                geometry_changed |= ui
                     .checkbox(&mut config.short_pitched, t(&lang, "short_pitched"))
-                    .changed()
-                {
-                    changed = true;
-                }
-                if crate::winding::ui::winding_ui(ui, &mut config, &lang) {
-                    changed = true;
-                }
-                if crate::mmf_field::ui::mmf_ui(ui, &mut config, &lang) {
-                    changed = true;
-                }
-                if crate::rotor::ui::rotor_ui(ui, &mut config, &lang) {
-                    changed = true;
-                }
-                if crate::winding_scheme::ui::winding_scheme_ui(ui, &mut config, &lang) {
-                    changed = true;
-                }
-                if ui
+                    .changed();
+
+                // The remaining controls only change what is drawn, never the
+                // shape of the machine.
+                visibility_changed |= crate::winding::ui::winding_ui(ui, &mut config, &lang);
+                visibility_changed |= crate::mmf_field::ui::mmf_ui(ui, &mut config, &lang);
+                visibility_changed |= crate::rotor::ui::rotor_ui(ui, &mut config, &lang);
+                visibility_changed |=
+                    crate::winding_scheme::ui::winding_scheme_ui(ui, &mut config, &lang);
+                visibility_changed |= ui
                     .checkbox(&mut config.show_vectors, t(&lang, "show_vectors"))
-                    .changed()
-                {
-                    changed = true;
-                }
-                if ui
-                    .checkbox(&mut config.show_fields, t(&lang, "show_fields"))
-                    .changed()
-                {
-                    changed = true;
-                }
+                    .changed();
 
                 ui.add_space(12.0);
                 ui.separator();
@@ -260,9 +297,26 @@ fn ui_panel(
             });
     }
 
-    if changed {
-        ev_writer.write(MotorConfigChanged);
+    // When minimized the button is a floating `Area`, which reserves no space,
+    // so the untouched `viewport_ui` correctly reports the whole viewport.
+    space.claim(&viewport_ui);
+
+    if geometry_changed {
+        ev_writer.write(MotorConfigChanged::GEOMETRY);
+    } else if visibility_changed {
+        ev_writer.write(MotorConfigChanged::VISIBILITY);
     }
+}
+
+/// Whether a slider's value should be pushed to the scene this frame.
+///
+/// A regeneration rebuilds hundreds of meshes, and `changed()` fires on nearly
+/// every frame of a drag, so a drag commits once on release. Clicks on the
+/// track, arrow keys and typed values are not drags and commit immediately.
+/// The value itself is always applied straight away, so the readouts in the
+/// panel still follow the handle live.
+fn slider_settled(response: &egui::Response) -> bool {
+    response.drag_stopped() || (response.changed() && !response.dragged())
 }
 
 /// Ensure groove_count stays divisible by 2 * pole_pairs * phases.
