@@ -76,44 +76,19 @@ fn draw_conductor_panel(
     let painter = ui.painter_at(rect);
     let n = config.groove_count;
 
-    // Background
-    // painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(255, 20, 28));
-
-    // Draw a subtle arc representing the stator bore
-    let cx = rect.center().x;
     let cy = rect.bottom() - 8.0;
     // Spread the n slots over the full rect width with some padding
     let padding = 24.0;
     let slot_step = (rect.width() - padding * 2.0) / n as f32;
     let sym_r = (slot_step * 0.38).min(12.0);
 
-    // Axis line
-    // painter.line_segment(
-    //     [
-    //         egui::pos2(rect.left() + padding, cy),
-    //         egui::pos2(rect.right() - padding, cy),
-    //     ],
-    //     egui::Stroke::new(1.0, egui::Color32::from_rgb(80, 80, 100)),
-    // );
-
-    // Tick marks and slot numbers
+    // Tick marks, one per slot
     for s in 0..n {
         let x = rect.left() + padding + (s as f32 + 0.5) * slot_step;
-        let tick_y = cy;
         painter.line_segment(
-            [egui::pos2(x, tick_y), egui::pos2(x, tick_y - 5.0)],
+            [egui::pos2(x, cy), egui::pos2(x, cy - 5.0)],
             egui::Stroke::new(1.0, egui::Color32::from_rgb(60, 60, 80)),
         );
-        // slot index label (only every q or every few slots to avoid clutter)
-        // if n <= 36 || s % (n / 12).max(1) == 0 {
-        //     painter.text(
-        //         egui::pos2(x, tick_y + 10.0),
-        //         egui::Align2::CENTER_CENTER,
-        //         (s + 1).to_string(),
-        //         egui::FontId::proportional(8.0),
-        //         egui::Color32::from_rgb(100, 100, 120),
-        //     );
-        // }
     }
 
     // Draw conductor symbols
@@ -173,7 +148,6 @@ fn draw_conductor_panel(
             );
             lx += 36.0;
         }
-        let _ = cx; // suppress unused warning
     }
 }
 
@@ -302,8 +276,6 @@ fn draw_mmf_panel(
         )
     };
 
-    // Background grid
-    // painter.rect_filled(plot_rect, 2.0, egui::Color32::from_rgb(18, 18, 26));
     painter.rect_stroke(
         plot_rect,
         2.0,
