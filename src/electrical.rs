@@ -52,18 +52,26 @@ fn ui_electrical_waves(
         return;
     };
 
+    let mut viewport_ui = egui::Ui::new(
+        ctx.clone(),
+        "electrical_waves_viewport".into(),
+        egui::UiBuilder::new()
+            .layer_id(egui::LayerId::background())
+            .max_rect(ctx.viewport_rect()),
+    );
+
     if *minimized {
-        egui::TopBottomPanel::bottom("electrical_minimized_panel")
+        egui::Panel::bottom("electrical_minimized_panel")
             .resizable(false)
-            .show(ctx, |ui| {
+            .show(&mut viewport_ui, |ui| {
                 if ui.button(t(&lang, "electrical_currents")).clicked() {
                     *minimized = false;
                 }
             });
     } else {
-        egui::TopBottomPanel::bottom("electrical_currents_panel")
+        egui::Panel::bottom("electrical_currents_panel")
             .resizable(true)
-            .show(ctx, |ui| {
+            .show(&mut viewport_ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.heading(t(&lang, "electrical_currents"));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
