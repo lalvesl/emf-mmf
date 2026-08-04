@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
 use std::f32::consts::{PI, TAU};
 
-use super::{Direction, WindingPart};
+use super::WindingPart;
 use crate::config::*;
 
 // ─── Arc tube mesh builder ─────────────────────────────────────────────────────
@@ -191,10 +191,10 @@ pub fn render_header_coils(
     // Same gauge as the slot conductors, so a coil reads as one continuous wire.
     let wire_size = layout.wire_radius * 2.0;
 
-    // One arc per conductor. Only the deep half starts a coil: it returns into
-    // the shallow half of the slot `pitch` steps away.
+    // One arc per conductor that starts a coil; it returns into the shallow
+    // half of the slot `pitch` steps away.
     for conductor in data.conductors {
-        if conductor.layer != 0 || conductor.direction == Direction::Out {
+        if !super::starts_coil(conductor, data.config.layers) {
             continue;
         }
 
@@ -216,9 +216,14 @@ pub fn render_header_coils(
 
         // Stagger by phase so overlapping coil heads stay readable, and by
         // conductor so the wires of one coil do not fuse into a single blob.
-        let lift = 0.12
-            + conductor.phase as f32 * 0.07
-            + conductor.index as f32 * layout.wire_radius * 1.6;
+        //
+        // All three terms are measured in wire gauges rather than world units:
+        // with few conductors the wire is fat and the arcs need to climb higher
+        // to stay apart, while with many thin wires the per-conductor term
+        // already provides the spread.
+        let lift = wire_size * 1.6
+            + conductor.phase as f32 * wire_size * 1.1
+            + conductor.index as f32 * wire_size * 0.8;
         let y_base_top = half_h + 0.05;
         let y_base_bot = -half_h - 0.05;
 

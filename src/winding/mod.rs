@@ -506,6 +506,59 @@ mod tests {
         }
     }
 
+    /// Regression: the coil-start filter was inherited from the single-layer
+    /// model, which drops half the coils of a double-layer winding. With full
+    /// pitch the gap is invisible (slot `i+pitch` is always an `Out` slot, so
+    /// every slot still gets touched); short pitching exposed it.
+    #[test]
+    fn every_slot_starts_a_coil_in_a_double_layer_winding() {
+        for short_pitched in [false, true] {
+            for count in [2_usize, 4, 6] {
+                let mut cfg = config(12, 3, 1, count);
+                cfg.short_pitched = short_pitched;
+                let assignments = compute_winding(&cfg);
+                let conductors = compute_conductors(&cfg, &assignments);
+
+                let deep = SlotLayout::new(count, TAU / 12.0, 2.0, 2.6).deep_count();
+                let starting: Vec<_> = conductors
+                    .iter()
+                    .filter(|c| starts_coil(c, cfg.layers))
+                    .collect();
+
+                // One coil per slot, carried by every conductor of the deep half.
+                assert_eq!(
+                    starting.len(),
+                    cfg.groove_count * deep,
+                    "layers={count} short_pitched={short_pitched}"
+                );
+
+                for slot in 0..cfg.groove_count {
+                    let from_slot = starting.iter().filter(|c| c.slot == slot).count();
+                    assert_eq!(
+                        from_slot, deep,
+                        "slot {slot} starts {from_slot} coils, expected {deep} \
+                         (layers={count}, short_pitched={short_pitched})"
+                    );
+                }
+            }
+        }
+    }
+
+    /// A single-layer winding has half as many coils: only the outgoing sides
+    /// start one, since the return side is the far end of another coil.
+    #[test]
+    fn single_layer_starts_half_as_many_coils() {
+        let cfg = config(12, 3, 1, 1);
+        let assignments = compute_winding(&cfg);
+        let conductors = compute_conductors(&cfg, &assignments);
+
+        let starting = conductors
+            .iter()
+            .filter(|c| starts_coil(c, cfg.layers))
+            .count();
+        assert_eq!(starting, cfg.groove_count / 2);
+    }
+
     /// A coil always leaves the deep half and returns into the shallow half.
     #[test]
     fn coil_partner_crosses_to_the_other_layer() {
