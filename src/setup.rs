@@ -12,7 +12,7 @@ pub fn setup(mut commands: Commands) {
     // Directional light
     commands.spawn((
         DirectionalLight {
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             illuminance: 8000.0,
             ..default()
         },
@@ -22,7 +22,7 @@ pub fn setup(mut commands: Commands) {
     // Point light
     commands.spawn((
         PointLight {
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             intensity: 4_000_000.0,
             range: 30.0,
             ..default()
