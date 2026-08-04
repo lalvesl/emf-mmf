@@ -17,7 +17,10 @@ use crate::config::*;
 struct ArcTubeParams {
     a_from: f32,
     a_diff: f32,
-    r_mid: f32,
+    /// Radius at the start of the arc — the deep coil side.
+    r_from: f32,
+    /// Radius at the end of the arc — the shallow coil side it returns into.
+    r_to: f32,
     y_base: f32,
     y_offset: f32,
     wire_size: f32,
@@ -28,7 +31,8 @@ struct ArcTubeParams {
 fn build_arc_tube_mesh(params: ArcTubeParams) -> Mesh {
     let a_from = params.a_from;
     let a_diff = params.a_diff;
-    let r_mid = params.r_mid;
+    let r_from = params.r_from;
+    let r_to = params.r_to;
     let y_base = params.y_base;
     let y_offset = params.y_offset;
     let wire_size = params.wire_size;
@@ -43,7 +47,10 @@ fn build_arc_tube_mesh(params: ArcTubeParams) -> Mesh {
         let t = seg as f32 / arc_segments as f32;
         let a = a_from + a_diff * t;
         let y = y_base + y_offset * (PI * t).sin();
-        centers.push(Vec3::new(r_mid * a.cos(), y, r_mid * a.sin()));
+        // Sweep radially as well, so the arc meets the shallow conductor it
+        // actually connects to rather than floating at a fixed radius.
+        let r = r_from + (r_to - r_from) * t;
+        centers.push(Vec3::new(r * a.cos(), y, r * a.sin()));
     }
 
     // Finite-difference tangents
@@ -141,38 +148,22 @@ pub fn render_conductors(
     data: &super::WindingData,
     phase_mats: &[Handle<StandardMaterial>],
 ) {
-    let assignments = data.assignments;
-    let segment_angle = data.segment_angle;
-    let tooth_angle = data.tooth_angle;
-    let r_bore = data.r_bore;
-    let r_slot_bot = data.r_slot_bot;
-
-    let r_mid = (r_bore + r_slot_bot) / 2.0;
+    let layout = data.layout;
     let wire_height = STATOR_HEIGHT * 0.95;
-    let wire_radial = (r_slot_bot - r_bore) * 0.55;
-    let wire_tangential = segment_angle * 0.35 * r_mid;
 
-    // Every conductor is the same cuboid, only placed differently — build the
-    // mesh once instead of one identical asset per slot.
-    let cube = meshes.add(Cuboid::new(wire_tangential, wire_height, wire_radial));
+    // Round conductors: a cylinder whose axis already runs along Y, which is
+    // the axial direction of the machine. All of them are identical, so the
+    // mesh is built once and instanced.
+    let wire = meshes.add(Cylinder::new(layout.wire_radius, wire_height));
 
-    // --- Conductors inside slots ---
-    for (i, assignment) in assignments.iter().enumerate() {
-        let Some(assign) = assignment else { continue };
-        let mat = phase_mats[assign.phase % phase_mats.len()].clone();
+    for conductor in data.conductors {
+        let mat = phase_mats[conductor.phase % phase_mats.len()].clone();
+        let position = layout.position(conductor.index, data.slot_center(conductor.slot), 0.0);
 
-        // Slot center angle (slot sits after the tooth)
-        let slot_center = i as f32 * segment_angle + tooth_angle + segment_angle * 0.25;
-
-        let x = r_mid * slot_center.cos();
-        let z = r_mid * slot_center.sin();
-
-        // Cuboid oriented radially
         commands.spawn((
-            Mesh3d(cube.clone()),
+            Mesh3d(wire.clone()),
             MeshMaterial3d(mat),
-            Transform::from_xyz(x, 0.0, z)
-                .with_rotation(Quat::from_rotation_y(-slot_center + PI / 2.0)),
+            Transform::from_translation(position),
             WindingPart,
         ));
     }
@@ -189,29 +180,33 @@ pub fn render_header_coils(
     }
 
     let n = data.config.groove_count;
-    let assignments = data.assignments;
-    let segment_angle = data.segment_angle;
-    let tooth_angle = data.tooth_angle;
+    let layout = data.layout;
     let half_h = data.half_h;
     let pitch = data.pitch;
 
     // Arc geometry constants (shared across all arcs)
     let arc_segments = 24; // was 120 separate entities; now 24 segments per tube mesh
-    let cross_sides = 6;   // hexagonal cross-section approximation
-    let r_mid = (STATOR_BORE_RADIUS + slot_bottom_radius()) / 2.0;
-    let wire_size = 0.04;
+    let cross_sides = 6; // hexagonal cross-section approximation
 
-    // --- Endwindings (arcs connecting coil sides) ---
-    for (i, assignment) in assignments.iter().enumerate() {
-        let Some(assign) = assignment else { continue };
-        if assign.direction == Direction::Out {
-            continue; // Only draw endwindings from the "In" side
+    // Same gauge as the slot conductors, so a coil reads as one continuous wire.
+    let wire_size = layout.wire_radius * 2.0;
+
+    // One arc per conductor. Only the deep half starts a coil: it returns into
+    // the shallow half of the slot `pitch` steps away.
+    for conductor in data.conductors {
+        if conductor.layer != 0 || conductor.direction == Direction::Out {
+            continue;
         }
-        let return_slot = (i + pitch) % n;
-        let mat = phase_mats[assign.phase % phase_mats.len()].clone();
 
-        let a_from = i as f32 * segment_angle + tooth_angle + segment_angle * 0.25;
-        let a_to = return_slot as f32 * segment_angle + tooth_angle + segment_angle * 0.25;
+        let return_slot = (conductor.slot + pitch) % n;
+        let partner = layout.coil_partner(conductor.index);
+        let mat = phase_mats[conductor.phase % phase_mats.len()].clone();
+
+        let (r_from, offset_from) = layout.placement(conductor.index);
+        let (r_to, offset_to) = layout.placement(partner);
+
+        let a_from = data.slot_center(conductor.slot) + offset_from / r_from;
+        let a_to = data.slot_center(return_slot) + offset_to / r_to;
 
         // Handle wrap-around
         let mut a_diff = a_to - a_from;
@@ -219,45 +214,32 @@ pub fn render_header_coils(
             a_diff += TAU;
         }
 
-        let y_offset_top = 0.15 + (assign.phase as f32 * 0.08);
+        // Stagger by phase so overlapping coil heads stay readable, and by
+        // conductor so the wires of one coil do not fuse into a single blob.
+        let lift = 0.12
+            + conductor.phase as f32 * 0.07
+            + conductor.index as f32 * layout.wire_radius * 1.6;
         let y_base_top = half_h + 0.05;
-        let y_offset_bot = -(0.15 + (assign.phase as f32 * 0.08));
         let y_base_bot = -half_h - 0.05;
 
-        // Top endwinding — one entity with one merged tube mesh
-        let mesh_top = build_arc_tube_mesh(ArcTubeParams {
-            a_from,
-            a_diff,
-            r_mid,
-            y_base: y_base_top,
-            y_offset: y_offset_top,
-            wire_size,
-            arc_segments,
-            cross_sides,
-        });
-        commands.spawn((
-            Mesh3d(meshes.add(mesh_top)),
-            MeshMaterial3d(mat.clone()),
-            Transform::default(),
-            WindingPart,
-        ));
-
-        // Bottom endwinding — one entity with one merged tube mesh
-        let mesh_bot = build_arc_tube_mesh(ArcTubeParams {
-            a_from,
-            a_diff,
-            r_mid,
-            y_base: y_base_bot,
-            y_offset: y_offset_bot,
-            wire_size,
-            arc_segments,
-            cross_sides,
-        });
-        commands.spawn((
-            Mesh3d(meshes.add(mesh_bot)),
-            MeshMaterial3d(mat),
-            Transform::default(),
-            WindingPart,
-        ));
+        for (y_base, y_offset) in [(y_base_top, lift), (y_base_bot, -lift)] {
+            let mesh = build_arc_tube_mesh(ArcTubeParams {
+                a_from,
+                a_diff,
+                r_from,
+                r_to,
+                y_base,
+                y_offset,
+                wire_size,
+                arc_segments,
+                cross_sides,
+            });
+            commands.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(mat.clone()),
+                Transform::default(),
+                WindingPart,
+            ));
+        }
     }
 }

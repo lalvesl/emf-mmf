@@ -211,9 +211,11 @@ fn ui_panel(
                 geometry_changed |= slider_settled(&response);
                 ui.add_space(4.0);
 
-                // Layers
+                // Layers — conductors per slot, packed two per row
                 let mut layers = config.layers as i32;
-                ui.label(t(&lang, "layers"));
+                let rows = config.layers.max(1).div_ceil(2);
+                let cols = config.layers.clamp(1, 2);
+                ui.label(format!("{} ({cols}×{rows})", t(&lang, "layers")));
                 let response = ui.add(egui::Slider::new(
                     &mut layers,
                     (MotorConfig::MIN.layers as i32)..=(MotorConfig::MAX.layers as i32),

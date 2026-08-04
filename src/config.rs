@@ -60,6 +60,9 @@ pub struct MotorConfig {
     pub groove_count: usize,
     pub phases: usize,
     pub short_pitched: bool,
+    /// Conductors packed into each slot. Split into two electrical layers:
+    /// the deep half starts a coil, the shallow half receives the return side
+    /// of the coil that started `coil_pitch` slots earlier.
     pub layers: usize,
     pub pole_pairs: usize,
     pub show_endwindings: bool,
@@ -87,7 +90,7 @@ impl MotorConfig {
         groove_count: 144,
         phases: MAX_PHASES,
         short_pitched: true,
-        layers: 2,
+        layers: 6,
         pole_pairs: 6,
         show_endwindings: true,
         show_vectors: true,

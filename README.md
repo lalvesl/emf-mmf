@@ -37,7 +37,7 @@ The application provides a UI panel to configure the following motor winding par
 | **Phases (m)**     | 2–10    | Number of electrical phases                                                |
 | **Poles (P)**      | 2–12    | Total magnetic poles, always even (pole pairs `p` = P/2)                    |
 | **Short-pitched**  | on/off  | Whether the winding uses short-pitched (chorded) coils to reduce harmonics |
-| **Layers**         | 1–2     | Number of winding layers per groove — *reserved, not wired up yet*          |
+| **Layers**         | 1–6     | Conductors packed into each slot (see below)                                |
 
 `S` must be divisible by `2 · p · m`; the panel snaps it to the nearest valid
 value and reports the resulting `q = S / (m · P)`, slot angle and phase angle.
@@ -46,13 +46,37 @@ Besides the winding parameters, the panel toggles the endwinding arcs, the MMF
 arrows, the MMF field overlay (per phase and resultant), the rotor, and the
 winding-scheme window.
 
-### Known limitations
+### Slot filling and electrical layers
 
-- **Layers** is exposed in the UI but not yet consumed: the winding model is
-  single-layer for now.
-- **Short-pitched** shifts the endwinding arcs by one slot, but a true chorded
-  winding needs the two-layer model above, so the arc currently lands on a
-  neighbouring phase belt.
+**Layers** is the number of round conductors packed into a slot. They are laid
+out two per row, filling from the slot bottom towards the bore — `4` gives a
+2×2 stack, `6` gives 2×3:
+
+```
+        slot bottom (r = bore + SLOT_DEPTH)
+        ┌───────────────┐
+        │  (A)     (A)  │  deep half  → starts the coil at this slot
+        │  (C')    (C') │  shallow half → returns the coil from slot i-pitch
+        └───────────────┘
+        bore  (r = STATOR_BORE_RADIUS)
+```
+
+The stack is split into two *electrical* layers. The deep half carries the
+outgoing side of the coil starting at this slot; the shallow half carries the
+return side of the coil that started `coil_pitch` slots earlier — same phase,
+reversed direction.
+
+- **Full pitch** → both halves resolve to the same phase, so the slot behaves
+  exactly like a single-layer winding.
+- **Short-pitched** → the halves disagree at the belt boundaries, putting two
+  different phases in one slot. That is what chording physically is, and it is
+  only possible because the slot has two layers.
+
+`Layers = 1` collapses to the plain single-layer winding. Odd counts give the
+extra conductor to the deep half.
+
+Endwinding arcs are drawn one per conductor, at the same gauge as the wire, and
+sweep radially so each arc actually meets the shallow conductor it connects to.
 
 ## Tech Stack
 

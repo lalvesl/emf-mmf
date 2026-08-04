@@ -6,7 +6,7 @@ use crate::config::MotorConfig;
 use crate::electrical::ElectricalState;
 use crate::i18n::{self, Language};
 use crate::phase;
-use crate::winding::{Direction, compute_winding};
+use crate::winding::{Direction, compute_conductors, compute_winding};
 
 pub struct WindingSchemePlugin;
 
@@ -40,15 +40,17 @@ fn winding_scheme_window(
         .resizable(true)
         .show(ctx, |ui| {
             let assignments = compute_winding(&config);
+            let conductors = compute_conductors(&config, &assignments);
 
             // ── Top panel: conductor layout ─────────────────────────────────
-            // ui.label(egui::RichText::new(i18n::t(&lang, "winding_diagram")).strong());
-            let conductor_panel_height = 90.0_f32;
+            // Height grows with the stack so a 6-conductor slot still fits.
+            let rows = config.layers.max(1).div_ceil(2);
+            let conductor_panel_height = 46.0 + rows as f32 * 22.0;
             let (rect_top, _) = ui.allocate_exact_size(
                 egui::vec2(ui.available_width(), conductor_panel_height),
                 egui::Sense::hover(),
             );
-            draw_conductor_panel(ui, rect_top, &config, &assignments, state.angle, &lang);
+            draw_conductor_panel(ui, rect_top, &config, &conductors, &lang);
 
             ui.add_space(4.0);
             ui.separator();
@@ -61,7 +63,7 @@ fn winding_scheme_window(
                 egui::vec2(ui.available_width(), waveform_panel_height),
                 egui::Sense::hover(),
             );
-            draw_mmf_panel(ui, rect_bot, &config, &assignments, state.angle, &lang);
+            draw_mmf_panel(ui, rect_bot, &config, &conductors, state.angle, &lang);
         });
 }
 
@@ -69,8 +71,7 @@ fn draw_conductor_panel(
     ui: &egui::Ui,
     rect: egui::Rect,
     config: &MotorConfig,
-    assignments: &[Option<crate::winding::SlotAssignment>],
-    _angle: f32,
+    conductors: &[crate::winding::Conductor],
     _lang: &Language,
 ) {
     let painter = ui.painter_at(rect);
@@ -80,7 +81,15 @@ fn draw_conductor_panel(
     // Spread the n slots over the full rect width with some padding
     let padding = 24.0;
     let slot_step = (rect.width() - padding * 2.0) / n as f32;
-    let sym_r = (slot_step * 0.38).min(12.0);
+
+    // Mirror the 3D packing: two conductors per row, deepest row first.
+    let count = config.layers.max(1);
+    let cols = count.min(2);
+    let rows = count.div_ceil(cols);
+
+    let row_step = 20.0_f32;
+    let sym_r = (slot_step * 0.38).min(row_step * 0.42);
+    let col_step = sym_r * 1.05;
 
     // Tick marks, one per slot
     for s in 0..n {
@@ -91,23 +100,28 @@ fn draw_conductor_panel(
         );
     }
 
-    // Draw conductor symbols
-    for (s, assign_opt) in assignments.iter().enumerate() {
-        let Some(assign) = assign_opt else { continue };
-        let x = rect.left() + padding + (s as f32 + 0.5) * slot_step;
+    // Draw conductor symbols, stacked so both electrical layers are visible
+    for conductor in conductors {
+        let slot_x = rect.left() + padding + (conductor.slot as f32 + 0.5) * slot_step;
 
-        // Stagger layers vertically: layer 0 at top, layers separate if double-layer
-        // For now single-layer: centre symbol at a fixed y above the axis line
-        // If double-layer winding could exist, we'd draw two symbols offset vertically.
-        // We draw the first assignment at y_top, second at y_bot if exists.
-        let y = cy - sym_r * 2.8;
+        let row = conductor.index / cols;
+        let col = conductor.index % cols;
+        let in_row = if row == rows - 1 {
+            count - row * cols
+        } else {
+            cols
+        };
 
-        let base_color = phase::colors::phase_color_egui(assign.phase, config.phases);
+        // Row 0 is the slot bottom, drawn at the top of the stack.
+        let x = slot_x + (col as f32 - (in_row as f32 - 1.0) / 2.0) * col_step;
+        let y = cy - 12.0 - (rows - 1 - row) as f32 * row_step;
+
+        let base_color = phase::colors::phase_color_egui(conductor.phase, config.phases);
 
         // Circle outline
         painter.circle_stroke(egui::pos2(x, y), sym_r, egui::Stroke::new(1.5, base_color));
 
-        match assign.direction {
+        match conductor.direction {
             // Current coming OUT of the page: ⊕ (dot)
             Direction::Out => {
                 painter.circle_filled(egui::pos2(x, y), sym_r * 0.32, base_color);
@@ -157,7 +171,7 @@ fn draw_mmf_panel(
     ui: &egui::Ui,
     rect: egui::Rect,
     config: &MotorConfig,
-    assignments: &[Option<crate::winding::SlotAssignment>],
+    conductors: &[crate::winding::Conductor],
     elec_angle: f32,
     lang: &Language,
 ) {
@@ -186,18 +200,19 @@ fn draw_mmf_panel(
     // first sample with θ ≥ θ_s and integrate once per phase afterwards. Doing
     // it as a running sum keeps this O(n + m·samples) instead of O(n·samples),
     // which matters because the window redraws every frame.
-    for (s, assign_opt) in assignments.iter().enumerate() {
-        let Some(assign) = assign_opt else { continue };
-        let sign = match assign.direction {
+    // Every conductor counts, so a double-layer slot holding two phases
+    // contributes to both of their winding functions.
+    for conductor in conductors {
+        let sign = match conductor.direction {
             Direction::Out => 1.0_f32,
             Direction::In => -1.0_f32,
         };
 
         // Smallest i with `i / SAMPLES * TAU >= s / n * TAU`, computed in
         // integers to avoid the float rounding of the previous comparison.
-        let step_at = (s * WAVEFORM_SAMPLES).div_ceil(n);
+        let step_at = (conductor.slot * WAVEFORM_SAMPLES).div_ceil(n);
         if step_at < WAVEFORM_SAMPLES {
-            wf[assign.phase][step_at] += sign;
+            wf[conductor.phase][step_at] += sign;
         }
     }
 
