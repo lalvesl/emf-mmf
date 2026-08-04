@@ -19,7 +19,9 @@ pub fn regenerate_stator(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if ev_config.read().next().is_none() {
+    // Visibility toggles never affect the iron, so they must not pay for a
+    // full rebuild. `count()` (not `any()`) so the reader is always drained.
+    if ev_config.read().filter(|e| e.geometry).count() == 0 {
         return;
     }
 
@@ -54,18 +56,34 @@ pub fn regenerate_stator(
         StatorPart,
     ));
 
-    // Teeth: one sector per groove
+    // Teeth: every tooth is the same sector at a different angle, so one mesh
+    // is built and instanced `n` times rather than generating `n` meshes.
+    let tooth = meshes.add(generate_sector_mesh(
+        r_bore,
+        r_slot_bot,
+        0.0,
+        tooth_angle,
+        -half_h,
+        half_h,
+        4,
+    ));
     for i in 0..n {
-        let a_start = i as f32 * segment_angle;
-        let a_end = a_start + tooth_angle;
-        let tooth = generate_sector_mesh(r_bore, r_slot_bot, a_start, a_end, -half_h, half_h, 4);
         commands.spawn((
-            Mesh3d(meshes.add(tooth)),
+            Mesh3d(tooth.clone()),
             MeshMaterial3d(iron_mat.clone()),
-            Transform::default(),
+            Transform::from_rotation(tooth_rotation(i, segment_angle)),
             StatorPart,
         ));
     }
+}
+
+/// Rotation placing the tooth mesh (built at angle 0) at groove `i`.
+///
+/// A `Quat::from_rotation_y(θ)` maps a point at parametric angle `a` to
+/// `a - θ`, so reaching `i · segment_angle` takes a negative rotation.
+#[inline]
+fn tooth_rotation(index: usize, segment_angle: f32) -> Quat {
+    Quat::from_rotation_y(-(index as f32) * segment_angle)
 }
 
 // ---------------------------------------------------------------------------
@@ -231,4 +249,49 @@ fn build_mesh(pos: Vec<[f32; 3]>, nor: Vec<[f32; 3]>, uvs: Vec<[f32; 2]>, idx: V
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_indices(Indices::U32(idx));
     mesh
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The instanced tooth must land exactly where the old per-tooth mesh did.
+    /// Guards the sign of `tooth_rotation`, which is easy to get backwards.
+    #[test]
+    fn instanced_teeth_land_on_their_grooves() {
+        let n = 24_usize;
+        let segment_angle = TAU / n as f32;
+        let tooth_angle = segment_angle * 0.5;
+
+        let base = generate_sector_mesh(2.0, 2.6, 0.0, tooth_angle, -1.0, 1.0, 4);
+        let base_pos = base
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+            .and_then(|a| a.as_float3())
+            .expect("base mesh has positions");
+
+        for i in [0_usize, 1, 7, 23] {
+            let a_start = i as f32 * segment_angle;
+            let expected = generate_sector_mesh(
+                2.0,
+                2.6,
+                a_start,
+                a_start + tooth_angle,
+                -1.0,
+                1.0,
+                4,
+            );
+            let expected_pos = expected
+                .attribute(Mesh::ATTRIBUTE_POSITION)
+                .and_then(|a| a.as_float3())
+                .expect("expected mesh has positions");
+
+            assert_eq!(base_pos.len(), expected_pos.len());
+            let rotation = tooth_rotation(i, segment_angle);
+            for (b, e) in base_pos.iter().zip(expected_pos) {
+                let got = rotation * Vec3::from_array(*b);
+                let want = Vec3::from_array(*e);
+                assert!(got.distance(want) < 1e-3, "groove {i}: {got:?} != {want:?}");
+            }
+        }
+    }
 }
