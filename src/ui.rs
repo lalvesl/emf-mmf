@@ -27,6 +27,14 @@ fn ui_panel(
         return;
     };
 
+    let mut viewport_ui = egui::Ui::new(
+        ctx.clone(),
+        "ui_panel_viewport".into(),
+        egui::UiBuilder::new()
+            .layer_id(egui::LayerId::background())
+            .max_rect(ctx.viewport_rect()),
+    );
+
     let mut changed = false;
 
     // Trigger initial build
@@ -44,10 +52,10 @@ fn ui_panel(
                 }
             });
     } else {
-        egui::SidePanel::left("motor_config_panel")
-            .min_width(220.0)
-            .default_width(260.0)
-            .show(ctx, |ui| {
+        egui::Panel::left("motor_config_panel")
+            .min_size(220.0)
+            .default_size(260.0)
+            .show(&mut viewport_ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.heading(t(&lang, "motor_config_heading"));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
