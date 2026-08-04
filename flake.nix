@@ -53,7 +53,7 @@
           ];
         };
 
-        rustStable = pkgs.rust-bin.stable."1.95.0".default.override {
+        rustStable = pkgs.rust-bin.stable."1.96.0".default.override {
           extensions = [
             "rust-src"
             "rust-analyzer"
