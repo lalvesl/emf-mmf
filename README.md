@@ -37,7 +37,7 @@ The application provides a UI panel to configure the following motor winding par
 | **Phases (m)**     | 2–10    | Number of electrical phases                                                |
 | **Poles (P)**      | 2–12    | Total magnetic poles, always even (pole pairs `p` = P/2)                    |
 | **Short-pitched**  | on/off  | Whether the winding uses short-pitched (chorded) coils to reduce harmonics |
-| **Layers**         | 1–2     | Number of winding layers per groove — **not implemented yet** (see below)   |
+| **Layers**         | 1–2     | Number of winding layers per groove — *reserved, not wired up yet*          |
 
 `S` must be divisible by `2 · p · m`; the panel snaps it to the nearest valid
 value and reports the resulting `q = S / (m · P)`, slot angle and phase angle.
@@ -48,11 +48,11 @@ winding-scheme window.
 
 ### Known limitations
 
-- **Layers** is exposed in the UI but has no effect: the winding model is
-  single-layer only.
+- **Layers** is exposed in the UI but not yet consumed: the winding model is
+  single-layer for now.
 - **Short-pitched** shifts the endwinding arcs by one slot, but a true chorded
-  winding needs the two-layer model above, so the arc lands on a neighbouring
-  phase belt.
+  winding needs the two-layer model above, so the arc currently lands on a
+  neighbouring phase belt.
 
 ## Tech Stack
 
