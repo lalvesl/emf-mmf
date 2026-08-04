@@ -101,8 +101,23 @@ impl MotorConfig {
 }
 
 /// Event triggered when motor configuration changes.
-#[derive(Message)]
-pub struct MotorConfigChanged;
+#[derive(Message, Clone, Copy)]
+pub struct MotorConfigChanged {
+    /// `true` when the machine itself changed (slots, phases, poles, coil
+    /// pitch); `false` when only a visibility toggle moved.
+    ///
+    /// Rebuilding the stator core costs one mesh per tooth — up to 144 — and
+    /// nothing about it depends on what is currently shown, so it listens for
+    /// geometry changes only.
+    pub geometry: bool,
+}
+
+impl MotorConfigChanged {
+    /// The machine changed shape: everything must be rebuilt.
+    pub const GEOMETRY: Self = Self { geometry: true };
+    /// Only what is drawn changed: the stator core can be left alone.
+    pub const VISIBILITY: Self = Self { geometry: false };
+}
 
 impl Default for MotorConfig {
     fn default() -> Self {
