@@ -3,6 +3,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::config::MotorConfig;
 use crate::i18n::{Language, t};
+use crate::ui::{PanelLayout, PanelSpace};
 
 pub struct EletricalPlugin;
 
@@ -27,7 +28,10 @@ impl Plugin for EletricalPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ElectricalState>()
             .add_systems(Update, update_electrical_angle)
-            .add_systems(EguiPrimaryContextPass, ui_electrical_waves);
+            .add_systems(
+                EguiPrimaryContextPass,
+                ui_electrical_waves.in_set(PanelLayout::Bottom),
+            );
     }
 }
 
@@ -46,19 +50,15 @@ fn ui_electrical_waves(
     mut state: ResMut<ElectricalState>,
     config: Res<MotorConfig>,
     lang: Res<Language>,
+    mut space: ResMut<PanelSpace>,
     mut minimized: Local<bool>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else {
         return;
     };
 
-    let mut viewport_ui = egui::Ui::new(
-        ctx.clone(),
-        "electrical_waves_viewport".into(),
-        egui::UiBuilder::new()
-            .layer_id(egui::LayerId::background())
-            .max_rect(ctx.viewport_rect()),
-    );
+    // Only the space the side panels left over, so the two never overlap.
+    let mut viewport_ui = space.ui(ctx, "electrical_waves_viewport");
 
     if *minimized {
         egui::Panel::bottom("electrical_minimized_panel")
@@ -105,9 +105,11 @@ fn ui_electrical_waves(
                 ui.add_space(10.0);
 
                 // Draw the waves
+                // `Sense::drag()` alone never sets the click flag, so a plain
+                // click on the plot could not seek — only a drag could.
                 let (rect, response) = ui.allocate_exact_size(
                     egui::vec2(ui.available_width(), 150.0),
-                    egui::Sense::drag(),
+                    egui::Sense::click_and_drag(),
                 );
 
                 // Background
@@ -186,4 +188,6 @@ fn ui_electrical_waves(
                 );
             });
     }
+
+    space.claim(&viewport_ui);
 }
