@@ -1,6 +1,10 @@
 use bevy::prelude::*;
 
-const MAX_PHASES: usize = 6;
+/// Upper bound on the number of phases the simulator supports.
+///
+/// This is both the length of [`MmfFieldConfig::phases_to_show`] and the
+/// `phases` field of [`MotorConfig::MAX`], so the two can never drift apart.
+pub const MAX_PHASES: usize = 10;
 
 #[derive(Resource, Clone, Debug)]
 pub struct MmfFieldConfig {
@@ -25,6 +29,16 @@ impl Default for MmfFieldConfig {
 }
 
 impl MmfFieldConfig {
+    /// Whether `phase` is currently selected for rendering.
+    ///
+    /// Indices beyond [`MAX_PHASES`] report as hidden instead of panicking, so
+    /// a stale phase index from a previous configuration can never crash a
+    /// render system.
+    #[inline]
+    pub fn shows_phase(&self, phase: usize) -> bool {
+        self.phases_to_show.get(phase).copied().unwrap_or(false)
+    }
+
     pub const MIN: Self = Self {
         show: false,
         phases_to_show: [false; MAX_PHASES],
@@ -73,7 +87,7 @@ impl MotorConfig {
 
     pub const MAX: Self = Self {
         groove_count: 144,
-        phases: 10,
+        phases: MAX_PHASES,
         short_pitched: true,
         layers: 2,
         pole_pairs: 6,

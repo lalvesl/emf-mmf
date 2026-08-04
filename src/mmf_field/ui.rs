@@ -1,10 +1,12 @@
-use crate::config::MotorConfig;
+use crate::config::{MAX_PHASES, MotorConfig};
 use crate::i18n::{Language, t};
 use crate::phase;
 use bevy_egui::egui;
 
 pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Language) -> bool {
     let mut changed = false;
+    // Never address more phases than `phases_to_show` can hold.
+    let rows = config.phases.min(MAX_PHASES);
 
     if ui
         .checkbox(&mut config.mmf_field.show, t(lang, "show_mmf_field"))
@@ -13,14 +15,14 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Language) -> b
     {
         changed = true;
         if config.mmf_field.show {
-            for i in 0..config.phases {
-                config.mmf_field.phases_to_show[i] = true;
+            for shown in config.mmf_field.phases_to_show.iter_mut().take(rows) {
+                *shown = true;
             }
         }
     }
 
     if config.mmf_field.show {
-        for i in 0..config.phases {
+        for i in 0..rows {
             let egui_color = phase::colors::phase_color_egui(i, config.phases);
             let letter = phase::letter::phase_letter(i);
 

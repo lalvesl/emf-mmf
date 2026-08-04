@@ -114,7 +114,7 @@ fn regenerate_field(
     // ── Per-phase sector meshes ────────────────────────────────────────────
     for pole in 0..(2 * p) {
         for phase in 0..m {
-            if !config.mmf_field.phases_to_show[phase] {
+            if !config.mmf_field.shows_phase(phase) {
                 continue;
             }
 
@@ -240,7 +240,7 @@ fn animate_field(
             continue;
         }
 
-        if !config.mmf_field.phases_to_show[sector.phase] {
+        if !config.mmf_field.shows_phase(sector.phase) {
             *vis = Visibility::Hidden;
             continue;
         }
