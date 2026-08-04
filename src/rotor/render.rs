@@ -34,9 +34,12 @@ fn regenerate_rotor(
         return;
     }
 
-    // Despawn old rotor
+    // Despawn old rotor. `RotorRoot` also carries `RotorPart`, and despawning
+    // it recursively removes its children (which carry `RotorPart` too), so
+    // `try_despawn` is used to skip entities already gone by the time this
+    // command runs.
     for entity in &query {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 
     if !config.show_rotor {
