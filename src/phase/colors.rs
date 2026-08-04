@@ -6,6 +6,7 @@ const PHASE_LIGHTNESS: f32 = 0.50;
 
 /// Phase color from chromatic circle division.
 /// Hue evenly distributed across `total_phases`.
+#[inline]
 pub fn phase_color(phase: usize, total_phases: usize) -> Color {
     let total = total_phases.max(1);
     let hue = (phase % total) as f32 * 360.0 / total as f32;
@@ -17,6 +18,7 @@ pub fn phase_color(phase: usize, total_phases: usize) -> Color {
     ))
 }
 
+#[inline]
 pub fn phase_color_opposite(phase: usize, total_phases: usize) -> Color {
     let color = phase_color(phase, total_phases);
     let hsla: bevy::color::Hsla = color.into();
@@ -28,6 +30,7 @@ pub fn phase_color_opposite(phase: usize, total_phases: usize) -> Color {
     ))
 }
 
+#[inline]
 pub fn phase_color_egui(phase: usize, total_phases: usize) -> egui::Color32 {
     let color: bevy::color::Srgba = phase_color(phase, total_phases).into();
     egui::Color32::from_rgb(
