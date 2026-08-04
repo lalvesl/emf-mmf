@@ -226,9 +226,16 @@ fn ui_panel(
                 geometry_changed |= slider_settled(&response);
                 ui.add_space(4.0);
 
-                // Short-pitched
+                // Short-pitched — only meaningful with two electrical layers.
+                // The setting is kept, not cleared, so toggling layers back on
+                // restores it; it simply has no effect meanwhile.
+                let can_chord = crate::winding::can_short_pitch(&config);
                 geometry_changed |= ui
-                    .checkbox(&mut config.short_pitched, t(&lang, "short_pitched"))
+                    .add_enabled_ui(can_chord, |ui| {
+                        ui.checkbox(&mut config.short_pitched, t(&lang, "short_pitched"))
+                    })
+                    .inner
+                    .on_disabled_hover_text(t(&lang, "short_pitched_needs_layers"))
                     .changed();
 
                 // The remaining controls only change what is drawn, never the

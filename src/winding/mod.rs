@@ -263,13 +263,28 @@ pub fn starts_coil(conductor: &Conductor, layers: usize) -> bool {
 }
 
 /// Coil pitch in number of slots.
+///
+/// Chording needs a slot to hold two coil sides that can belong to different
+/// phases, so it is only possible with two electrical layers. A single-layer
+/// winding has one coil side per slot and the phase-belt allocation already
+/// fixes the phase and polarity of every slot; the coils merely pair up slots
+/// that are already assigned. Changing their span would only reroute wire
+/// through the air outside the core, leaving the MMF — and therefore the
+/// winding factor — untouched. Its pitch factor is always 1, so the request is
+/// ignored rather than drawing coils that short two phases together.
 pub fn coil_pitch(config: &MotorConfig) -> usize {
     let slots_per_pole = config.groove_count / (2 * config.pole_pairs);
-    if config.short_pitched {
+    if config.short_pitched && config.layers > 1 {
         slots_per_pole.saturating_sub(1).max(1)
     } else {
         slots_per_pole
     }
+}
+
+/// Whether chording actually does anything for this machine.
+#[inline]
+pub fn can_short_pitch(config: &MotorConfig) -> bool {
+    config.layers > 1
 }
 
 /// Data parameters for winding rendering, reducing argument counts for clippy.
@@ -668,6 +683,88 @@ mod tests {
         let data = winding_data(&cfg, &conductors);
 
         assert!(data.conductor_height() / 2.0 < data.half_h);
+    }
+
+    /// Chording is only possible when a slot holds two coil sides that can
+    /// belong to different phases, so a single-layer winding cannot be
+    /// short-pitched: its pitch factor is always 1. Asking for it must be a
+    /// no-op, not a set of coils shorting two phases together.
+    #[test]
+    fn a_single_layer_winding_cannot_be_short_pitched() {
+        for n in [12_usize, 24, 36] {
+            let mut full = config(n, 3, 2, 1);
+            full.short_pitched = false;
+            let mut chorded = full.clone();
+            chorded.short_pitched = true;
+
+            assert!(!can_short_pitch(&chorded));
+            assert_eq!(
+                coil_pitch(&chorded),
+                coil_pitch(&full),
+                "n={n}: chording changed the pitch of a single-layer winding"
+            );
+
+            // The slot occupancy is what produces the MMF; it must be identical.
+            let a = compute_conductors(&full, &compute_winding(&full));
+            let b = compute_conductors(&chorded, &compute_winding(&chorded));
+            assert_eq!(a.len(), b.len());
+            for (x, y) in a.iter().zip(b.iter()) {
+                assert_eq!((x.slot, x.phase, x.direction), (y.slot, y.phase, y.direction));
+            }
+        }
+    }
+
+    /// With two layers or more it must still do something, or the guard above
+    /// would be hiding a broken feature rather than an impossible one.
+    #[test]
+    fn two_layers_can_still_be_short_pitched() {
+        let mut cfg = config(24, 3, 2, 2);
+        cfg.short_pitched = true;
+        assert!(can_short_pitch(&cfg));
+
+        let mut full = cfg.clone();
+        full.short_pitched = false;
+        assert_ne!(coil_pitch(&cfg), coil_pitch(&full));
+    }
+
+    /// A coil is a loop of one phase: it must return into a slot carrying that
+    /// same phase with the opposite polarity. Anything else is not a coil.
+    #[test]
+    fn every_endwinding_returns_into_its_own_phase() {
+        for short_pitched in [false, true] {
+            for count in [1_usize, 2, 4, 6] {
+                let mut cfg = config(24, 3, 2, count);
+                cfg.short_pitched = short_pitched;
+                let assignments = compute_winding(&cfg);
+                let conductors = compute_conductors(&cfg, &assignments);
+                let pitch = coil_pitch(&cfg);
+                let n = cfg.groove_count;
+
+                for start in conductors.iter().filter(|c| starts_coil(c, cfg.layers)) {
+                    let return_slot = (start.slot + pitch) % n;
+                    let partner = SlotLayout::new(count, TAU / n as f32, 2.0, 2.6)
+                        .coil_partner(start.index);
+                    let far_side = conductors
+                        .iter()
+                        .find(|c| c.slot == return_slot && c.index == partner)
+                        .expect("the endwinding must land on a real conductor");
+
+                    assert_eq!(
+                        far_side.phase, start.phase,
+                        "layers={count} short_pitched={short_pitched}: slot {} phase {} \
+                         wires to slot {return_slot} phase {}",
+                        start.slot, start.phase, far_side.phase
+                    );
+                    assert_eq!(
+                        far_side.direction,
+                        start.direction.reversed(),
+                        "layers={count} short_pitched={short_pitched}: slot {} does not \
+                         close a loop with slot {return_slot}",
+                        start.slot
+                    );
+                }
+            }
+        }
     }
 
     /// A coil always leaves the deep half and returns into the shallow half.

@@ -48,6 +48,17 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "short_pitched") => "Encurtamento de passo",
         (Language::En, "short_pitched") => "Short-pitched coils",
 
+        (Language::PtBr, "short_pitched_needs_layers") => {
+            "O encurtamento exige duas camadas elétricas: é o que coloca fases \
+             diferentes na mesma ranhura. Com 1 camada o passo não altera a FMM \
+             (fator de passo = 1)."
+        }
+        (Language::En, "short_pitched_needs_layers") => {
+            "Chording needs two electrical layers — that is what puts different \
+             phases in one slot. With 1 layer the span does not change the MMF \
+             (pitch factor = 1)."
+        }
+
         (Language::PtBr, "show_headers") => "Mostrar cabeças de bobina",
         (Language::En, "show_headers") => "Show coil headers",
 

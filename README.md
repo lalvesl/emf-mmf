@@ -36,7 +36,7 @@ The application provides a UI panel to configure the following motor winding par
 | **Grooves (S)**    | 6–144   | Total number of slots/grooves in the stator                                |
 | **Phases (m)**     | 2–10    | Number of electrical phases                                                |
 | **Poles (P)**      | 2–12    | Total magnetic poles, always even (pole pairs `p` = P/2)                    |
-| **Short-pitched**  | on/off  | Whether the winding uses short-pitched (chorded) coils to reduce harmonics |
+| **Short-pitched**  | on/off  | Chorded coils, to reduce harmonics. Requires `Layers ≥ 2` (see below)      |
 | **Layers**         | 1–6     | Conductors packed into each slot (see below)                                |
 
 `S` must be divisible by `2 · p · m`; the panel snaps it to the nearest valid
@@ -74,6 +74,30 @@ reversed direction.
 
 `Layers = 1` collapses to the plain single-layer winding. Odd counts give the
 extra conductor to the deep half.
+
+### Why chording requires two layers
+
+A single-layer winding **cannot** be short-pitched, so the checkbox is disabled
+at `Layers = 1`.
+
+The airgap MMF depends only on which conductor sits in which slot carrying which
+current — the endwindings run outside the magnetic circuit and contribute
+nothing. With one coil side per slot, the phase-belt allocation already fixes the
+phase and polarity of every slot; the coils merely pair up slots that are
+already assigned. Changing their span would only reroute wire through the air,
+leaving the MMF and the winding factor untouched: `k_p ≡ 1`.
+
+Chording requires one slot to hold two coil sides that can belong to *different*
+phases — which is the definition of chording and the reason it needs two layers.
+Forcing a short span onto a single-layer winding does not chord it, it wires one
+phase into another phase's slot: with `S=24, p=2, m=3`, slot 0 (`A+`) would run
+to slot 5 (`B+`) instead of slot 6 (`A−`).
+
+(Concentric or "basket" single-layer windings do have coils of unequal span
+within a group, which is sometimes loosely called short-pitching. The group still
+occupies the same slots with the same polarities as the equivalent full-pitch
+winding, so the winding factor is unchanged — the unequal spans are a coil-
+insertion convenience, not an electromagnetic choice.)
 
 Endwinding arcs are drawn one per conductor, at the same gauge as the wire, and
 sweep radially so each arc actually meets the shallow conductor it connects to.
