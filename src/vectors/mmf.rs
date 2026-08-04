@@ -52,6 +52,20 @@ fn regenerate_vectors(
         height: 0.2,
     });
 
+    // The resultant arrow looks the same for every pole, so its meshes and
+    // material are built once and shared instead of per-pole.
+    let res_shaft = meshes.add(Cylinder::new(0.04, 1.0));
+    let res_head = meshes.add(Cone {
+        radius: 0.08,
+        height: 0.3,
+    });
+    let res_color = Color::WHITE;
+    let res_mat = materials.add(StandardMaterial {
+        base_color: res_color,
+        emissive: res_color.into(),
+        ..default()
+    });
+
     // Spawn Phase Vectors
     for pole in 0..(2 * p) {
         for phase in 0..m {
@@ -85,20 +99,7 @@ fn regenerate_vectors(
                 });
         }
 
-        let res_shaft = meshes.add(Cylinder::new(0.04, 1.0));
-        let res_head = meshes.add(Cone {
-            radius: 0.08,
-            height: 0.3,
-        });
-
         // Spawn Resultant Vector (White)
-        let res_color = Color::WHITE;
-        let res_mat = materials.add(StandardMaterial {
-            base_color: res_color,
-            emissive: res_color.into(),
-            ..default()
-        });
-
         commands
             .spawn((
                 Transform::default(),
@@ -107,13 +108,13 @@ fn regenerate_vectors(
             ))
             .with_children(|parent| {
                 parent.spawn((
-                    Mesh3d(res_shaft),
+                    Mesh3d(res_shaft.clone()),
                     MeshMaterial3d(res_mat.clone()),
                     Transform::from_xyz(0.0, 0.5, 0.0),
                 ));
                 parent.spawn((
-                    Mesh3d(res_head),
-                    MeshMaterial3d(res_mat),
+                    Mesh3d(res_head.clone()),
+                    MeshMaterial3d(res_mat.clone()),
                     Transform::from_xyz(0.0, 1.0, 0.0),
                 ));
             });

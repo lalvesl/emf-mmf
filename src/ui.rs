@@ -222,7 +222,8 @@ fn ui_panel(
                     let poles_str = format!("{}: {}", t(&lang, "total_poles"), 2 * p);
 
                     let alpha = (p as f32 * 360.0) / (n as f32);
-                    let alpha_str = format!("{} (α=P/2.360/S): {}°", t(&lang, "slot_angle"), alpha);
+                    let alpha_str =
+                        format!("{} (α=P/2.360/S): {:.2}°", t(&lang, "slot_angle"), alpha);
 
                     let alpha_m = if !m.is_multiple_of(2) {
                         360.0 / m as f32
@@ -235,7 +236,7 @@ fn ui_panel(
                         "(α.m=180/m)"
                     };
                     let alpha_m_str = format!(
-                        "{} {}: {}°",
+                        "{} {}: {:.2}°",
                         t(&lang, "phase_angle"),
                         alpha_m_label,
                         alpha_m

@@ -31,19 +31,34 @@ The simulation models:
 
 The application provides a UI panel to configure the following motor winding parameters:
 
-| Parameter          | Description                                                                |
-| ------------------ | -------------------------------------------------------------------------- |
-| **Grooves Number** | Total number of slots/grooves in the stator (12–72)                        |
-| **Phases**         | Number of electrical phases (e.g., 1, 3, 6…)                               |
-| **Short-pitched**  | Whether the winding uses short-pitched (chorded) coils to reduce harmonics |
-| **Layers**         | Number of winding layers per groove (single-layer or double-layer)         |
-| **Pole Pairs**     | Number of magnetic pole pairs (1–4)                                        |
+| Parameter          | Range   | Description                                                                |
+| ------------------ | ------- | -------------------------------------------------------------------------- |
+| **Grooves (S)**    | 6–144   | Total number of slots/grooves in the stator                                |
+| **Phases (m)**     | 2–10    | Number of electrical phases                                                |
+| **Poles (P)**      | 2–12    | Total magnetic poles, always even (pole pairs `p` = P/2)                    |
+| **Short-pitched**  | on/off  | Whether the winding uses short-pitched (chorded) coils to reduce harmonics |
+| **Layers**         | 1–2     | Number of winding layers per groove — **not implemented yet** (see below)   |
+
+`S` must be divisible by `2 · p · m`; the panel snaps it to the nearest valid
+value and reports the resulting `q = S / (m · P)`, slot angle and phase angle.
+
+Besides the winding parameters, the panel toggles the endwinding arcs, the MMF
+arrows, the MMF field overlay (per phase and resultant), the rotor, and the
+winding-scheme window.
+
+### Known limitations
+
+- **Layers** is exposed in the UI but has no effect: the winding model is
+  single-layer only.
+- **Short-pitched** shifts the endwinding arcs by one slot, but a true chorded
+  winding needs the two-layer model above, so the arc lands on a neighbouring
+  phase belt.
 
 ## Tech Stack
 
-- **Rust**: Core language for performance and safety.
-- **Bevy 0.18**: ECS-based 3D game engine for rendering.
-- **bevy_egui**: For the configuration side-panel.
+- **Rust**: Core language for performance and safety (edition 2024).
+- **Bevy 0.19**: ECS-based 3D game engine for rendering.
+- **bevy_egui 0.41**: For the configuration panels and 2D diagrams.
 - **Nix Flakes**: Reproducible development and build environments.
 - **Dioxus CLI**: Used as a development tool for hot-patching and multi-platform builds.
 
@@ -64,24 +79,46 @@ nix develop
 
 The shell uses **Rust Nightly** with the **Cranelift** codegen backend for fast incremental compilation.
 
-### Run and Build (via Nix Flakes)
+### Run (via Nix apps)
 
-The project includes several `apps` defined in `flake.nix` for easy building and execution:
+The `apps` in `flake.nix` drive the Dioxus CLI (`dx`) for local development:
 
 | Action            | Command                   | Description                                                          |
 | :---------------- | :------------------------ | :------------------------------------------------------------------- |
 | **Run Dev**       | `nix run`                 | Runs `dx serve` with hot-patching for local development (Native).    |
 | **Run Web**       | `nix run .#web`           | Runs `dx serve` with the web platform target.                        |
-| **Build Web**     | `nix run .#build-web`     | Compiles a production-ready WebAssembly bundle.                      |
-| **Build Linux**   | `nix run .#build-linux`   | Compiles a release binary for Linux.                                 |
+| **Build Web**     | `nix run .#build-web`     | `dx build` for a WebAssembly bundle.                                 |
+| **Build Linux**   | `nix run .#build-linux`   | `dx build --release` for Linux.                                      |
 | **Build Windows** | `nix run .#build-windows` | Cross-compiles a release binary for Windows (x86_64-pc-windows-gnu). |
+
+### Build (via Nix packages)
+
+The `packages` are the reproducible, sandboxed builds — these are what CI runs.
+They call `cargo` directly and do not need the Dioxus CLI:
+
+| Command             | Output                                                     |
+| :------------------ | :--------------------------------------------------------- |
+| `nix build`         | Linux binary at `result/bin/emf-mmf` (alias of `.#linux`). |
+| `nix build .#web`   | WASM bundle + `index.html` in `result/`.                   |
+| `nix build .#windows` | `result/bin/emf-mmf.exe`.                                |
+| `nix build .#android` | `result/emf-mmf.apk`.                                    |
 
 ## Project Structure
 
-- `src/main.rs`: Application entry point and plugin registration.
-- `src/stator.rs`: Procedural stator mesh generation logic.
-- `src/winding.rs`: Algorithms for winding distribution and wire mesh generation.
-- `src/ui.rs`: UI panel for real-time configuration using `bevy_inspector_egui`.
+- `src/main.rs` / `src/lib.rs`: Entry point and plugin registration.
+- `src/config.rs`: `MotorConfig` resource, geometry constants, and the
+  `MotorConfigChanged` message that drives every regeneration.
+- `src/stator.rs`: Procedural stator mesh generation (yoke + teeth).
+- `src/winding/`: Phase-belt distribution, slot conductors, endwinding arcs and
+  current-direction symbols.
+- `src/electrical.rs`: Electrical angle animation and the current waveform strip.
+- `src/mmf_field/`: MMF field overlay meshes (per phase and resultant).
+- `src/vectors/`: 3D MMF arrows per phase and pole.
+- `src/rotor/`: Rotor geometry, synchronised to the resultant MMF.
+- `src/winding_scheme/`: 2D winding diagram and MMF waveform window.
+- `src/phase/`: Phase colours and letters.
+- `src/ui.rs`: Main configuration panel (`bevy_egui`).
+- `src/i18n.rs`: PT-BR / EN string table.
 - `src/camera.rs`: Orbit camera controller for 3D exploration.
 - `flake.nix`: Nix configuration for development and build automation.
 

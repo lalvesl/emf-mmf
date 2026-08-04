@@ -48,6 +48,61 @@ pub struct MmfResultSector {
 /// White RGBA used for the resultant MMF field.
 const RESULT_BASE_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
+/// Mechanical half-width of one phase×pole MMF lobe.
+///
+/// Consecutive pole axes sit one pole pitch (`π / p` mechanical) apart, so a
+/// half-width of `π / 2p` makes the `2p` lobes of a phase tile the bore exactly
+/// once, without overlapping.
+#[inline]
+fn lobe_half_span(pole_pairs: usize) -> f32 {
+    PI / (2.0 * pole_pairs as f32)
+}
+
+/// Shortest angular distance between two angles, in `[0, π]`.
+///
+/// Needed wherever the sample angle and the axis angle are produced
+/// independently: a naive `(a - b).abs()` reports ~2π for two angles that sit
+/// on opposite sides of the ±π seam.
+#[inline]
+fn angular_distance(a: f32, b: f32) -> f32 {
+    let d = (a - b).rem_euclid(TAU);
+    d.min(TAU - d)
+}
+
+/// Mechanical angle of the magnetic axis of one phase×pole coil group.
+///
+/// `offset_elec` is the displacement of the group's axis from the start of its
+/// phase belt, and `offset_mech` aligns the result with the slot centres used
+/// by the winding geometry.
+#[inline]
+fn lobe_axis_angle(
+    pole: usize,
+    phase: usize,
+    alpha_m: f32,
+    offset_elec: f32,
+    offset_mech: f32,
+    pole_pairs: f32,
+) -> f32 {
+    let start_elec = phase as f32 * alpha_m + pole as f32 * PI;
+    ((start_elec + offset_elec) / pole_pairs) + offset_mech
+}
+
+/// Instantaneous per-unit current of `phase` at electrical angle `elec_angle`.
+#[inline]
+fn phase_current(elec_angle: f32, phase: usize, alpha_m: f32) -> f32 {
+    (elec_angle - phase as f32 * alpha_m).cos()
+}
+
+/// Electrical displacement between consecutive phases, in radians.
+#[inline]
+fn phase_displacement(phases: usize) -> f32 {
+    if !phases.is_multiple_of(2) {
+        TAU / phases as f32
+    } else {
+        PI / phases as f32
+    }
+}
+
 // ─── Regenerate (on config change) ───────────────────────────────────────────
 
 fn regenerate_field(
@@ -89,19 +144,13 @@ fn regenerate_field(
     let pitch = crate::winding::coil_pitch(&config) as f32;
 
     let alpha = (p_f32 * TAU) / n; // electrical angle per slot
-    let alpha_m = if !config.phases.is_multiple_of(2) {
-        TAU / m_f32
-    } else {
-        PI / m_f32
-    };
+    let alpha_m = phase_displacement(m);
 
     let offset_mech = (TAU / n) * 0.75; // matches winding.rs slot offset
+    let offset_elec = (q - 1.0 + pitch) / 2.0 * alpha;
 
-    // Angular half-width of one coil group in MECHANICAL radians.
-    // One coil group spans `q` slots, so in electrical radians it is `q * alpha`.
-    // In mechanical radians the span is `q * alpha / p`.
-    let _group_span_mech = (q * alpha) / p_f32; // full span
-    let half_span = PI; //group_span_mech * 0.5;
+    // One lobe per phase per pole, each covering exactly one pole pitch.
+    let half_span = lobe_half_span(p);
 
     let r_inner = 0.05; // tiny inner hole to avoid degenerate tris
     let r_outer = STATOR_BORE_RADIUS * 0.97; // just inside the bore surface
@@ -118,11 +167,8 @@ fn regenerate_field(
                 continue;
             }
 
-            let phase_shift_elec = phase as f32 * alpha_m;
-            let start_elec = phase_shift_elec + (pole as f32 * PI);
-            let offset_elec = (q - 1.0 + pitch) / 2.0 * alpha;
-            let center_elec = start_elec + offset_elec;
-            let axis_angle = (center_elec / p_f32) + offset_mech;
+            let axis_angle =
+                lobe_axis_angle(pole, phase, alpha_m, offset_elec, offset_mech, p_f32);
 
             let color_srgba: bevy::color::Srgba = crate::phase::colors::phase_color(phase, m).into();
             let base_color = [color_srgba.red, color_srgba.green, color_srgba.blue, 1.0];
@@ -225,11 +271,7 @@ fn animate_field(
         return;
     }
 
-    let alpha_m = if !m.is_multiple_of(2) {
-        TAU / m as f32
-    } else {
-        PI / m as f32
-    };
+    let alpha_m = phase_displacement(m);
 
     let gradient_intensity = config.mmf_field.gradient_intensity;
 
@@ -248,8 +290,7 @@ fn animate_field(
         *vis = Visibility::Visible;
 
         // Compute instantaneous current for this phase
-        let phase_shift_elec = sector.phase as f32 * alpha_m;
-        let current = (state.angle - phase_shift_elec).cos().powi(3);
+        let current = phase_current(state.angle, sector.phase, alpha_m);
 
         // Pole alternation: every other pole inverts the field direction
         let mmf_amplitude = current * if sector.pole % 2 == 0 { 1.0 } else { -1.0 };
@@ -301,11 +342,7 @@ fn animate_result(
 
         *vis = Visibility::Visible;
 
-        let alpha_m = if !m.is_multiple_of(2) {
-            TAU / m as f32
-        } else {
-            PI / m as f32
-        };
+        let alpha_m = phase_displacement(m);
         let gradient_intensity = config.mmf_field.gradient_intensity;
         let half_span = sector.half_angular_span;
         let segments = sector.segments;
@@ -314,38 +351,43 @@ fn animate_result(
         // phase×pole so we can build a full-ring colour array.
         let sample_count = segments + 1;
 
+        // Every lobe's axis and signed amplitude is constant across the ring,
+        // so resolve them once instead of per angular sample.
+        let n = config.groove_count as f32;
+        let p_f32 = p as f32;
+        let q = n / (2.0 * p_f32 * m as f32);
+        let pitch = crate::winding::coil_pitch(&config) as f32;
+        let alpha_elec = (p_f32 * TAU) / n;
+        let offset_elec = (q - 1.0 + pitch) / 2.0 * alpha_elec;
+        let offset_mech = (TAU / n) * 0.75;
+
+        // Must match the lobe width used for the individual phase sectors, so
+        // the resultant really is the sum of what is drawn per phase.
+        let lobe_half_span = lobe_half_span(p);
+
+        let lobes: Vec<(f32, f32)> = (0..(2 * p))
+            .flat_map(|pole| (0..m).map(move |phase| (pole, phase)))
+            .map(|(pole, phase)| {
+                let axis_angle =
+                    lobe_axis_angle(pole, phase, alpha_m, offset_elec, offset_mech, p_f32);
+                let sign = if pole % 2 == 0 { 1.0 } else { -1.0 };
+                let amplitude = phase_current(state.angle, phase, alpha_m) * sign;
+                (axis_angle, amplitude)
+            })
+            .collect();
+
         // Build a per-angle resultant amplitude array over the full ring.
         // We step from -PI to +PI (axis=0, half_span=PI covers all 360°).
         let mmf_at_angle = |a_mech: f32| -> f32 {
-            let mut total = 0.0_f32;
-            for pole in 0..(2 * p) {
-                for phase in 0..m {
-                    // Same axis calculation as in regenerate_field
-                    let n = config.groove_count as f32;
-                    let p_f32 = p as f32;
-                    let m_f32 = m as f32;
-                    let q = n / (2.0 * p_f32 * m_f32);
-                    let pitch = crate::winding::coil_pitch(&config) as f32;
-                    let alpha_elec = (p_f32 * TAU) / n;
-                    let phase_shift_elec = phase as f32 * alpha_m;
-                    let start_elec = phase_shift_elec + (pole as f32 * PI);
-                    let offset_elec = (q - 1.0 + pitch) / 2.0 * alpha_elec;
-                    let center_elec = start_elec + offset_elec;
-                    let offset_mech = (TAU / n) * 0.75;
-                    let axis_angle = (center_elec / p_f32) + offset_mech;
-
-                    // Angular distance from this sector's axis
-                    let delta = (a_mech - axis_angle).abs();
-                    let t = (delta / PI).clamp(0.0, 1.0);
+            let total: f32 = lobes
+                .iter()
+                .map(|&(axis_angle, amplitude)| {
+                    let delta = angular_distance(a_mech, axis_angle);
+                    let t = (delta / lobe_half_span).clamp(0.0, 1.0);
                     let bell = (1.0 - t * t).max(0.0_f32).sqrt().powf(gradient_intensity);
-
-                    // Instantaneous phase current
-                    let current = (state.angle - phase_shift_elec).cos().powi(3);
-                    let sign = if pole % 2 == 0 { 1.0 } else { -1.0 };
-
-                    total += bell * current * sign;
-                }
-            }
+                    bell * amplitude
+                })
+                .sum();
             // Normalise so maximum amplitude is ~1 when all phases are at peak.
             // Dividing by m spreads the scale evenly across all phases.
             (total / m as f32).abs().clamp(0.0, 1.0)
@@ -413,8 +455,9 @@ fn animate_result(
 ///   → 4 triangulated faces (top, bottom, inner wall, outer wall)
 ///
 /// The gradient alpha at each vertex is:
-///   `alpha = amplitude × (cos(delta / half_span × π/2) ^ gamma).max(0)`
-/// where `delta` is the angular deviation from the axis.
+///   `alpha = amplitude × (√(1 - t²)) ^ gamma`,  `t = delta / half_span`
+/// where `delta` is the angular deviation from the axis and `gamma` is
+/// `MmfFieldConfig::gradient_intensity`.
 struct SectorMeshParams {
     r_inner: f32,
     r_outer: f32,
@@ -457,6 +500,9 @@ fn build_sector_mesh(params: SectorMeshParams) -> Mesh {
     let mut indices: Vec<u32> = Vec::new();
 
     // Helper: alpha at angle `a` from axis
+    // `a` is always generated as `axis_angle ± half_span`, so it can never be
+    // more than `half_span` away and no ±π wrapping is needed here (unlike in
+    // `animate_result`, which samples the ring independently of any axis).
     let alpha_at = |a: f32| -> f32 {
         let delta = (a - axis_angle).abs();
         let t = (delta / half_span).clamp(0.0, 1.0);
@@ -602,6 +648,9 @@ fn recolor_sector_mesh(
     amplitude: f32,
     base_color: [f32; 4],
 ) {
+    // `a` is always generated as `axis_angle ± half_span`, so it can never be
+    // more than `half_span` away and no ±π wrapping is needed here (unlike in
+    // `animate_result`, which samples the ring independently of any axis).
     let alpha_at = |a: f32| -> f32 {
         let delta = (a - axis_angle).abs();
         let t = (delta / half_span).clamp(0.0, 1.0);
@@ -612,30 +661,11 @@ fn recolor_sector_mesh(
     let color_at =
         |a: f32| -> [f32; 4] { [base_color[0], base_color[1], base_color[2], alpha_at(a)] };
 
-    // Must regenerate all 4 faces' colour arrays in the same vertex order as
-    // `build_sector_mesh`.
+    // Regenerate all 4 faces' colours in the exact vertex order used by
+    // `build_sector_mesh`. Note the caps store two separate rings while the
+    // walls interleave (bot, top) pairs, so the two layouts differ.
     let n = segments + 1;
     let total = (n * 8) as usize; // 4 faces × 2 rings each, each with n verts
-    let mut colors: Vec<[f32; 4]> = Vec::with_capacity(total);
-
-    for _face in 0..4 {
-        // inner ring
-        for i in 0..=segments {
-            let t = i as f32 / segments as f32;
-            let a = (axis_angle - half_span) + t * 2.0 * half_span;
-            colors.push(color_at(a));
-        }
-        // outer ring or paired interleaved (outer wall / inner wall)
-        for i in 0..=segments {
-            let t = i as f32 / segments as f32;
-            let a = (axis_angle - half_span) + t * 2.0 * half_span;
-            colors.push(color_at(a));
-        }
-    }
-
-    // For the wall faces vertices are interleaved (bot,top pairs) rather than
-    // split into two rings, so rebuild those in the correct order.
-    // We need to regenerate the full colour slice matching the exact build layout.
     let mut colors_correct: Vec<[f32; 4]> = Vec::with_capacity(total);
 
     // Face 0 — top cap: inner (segs+1) then outer (segs+1)
@@ -680,5 +710,86 @@ fn recolor_sector_mesh(
 
     if let Some(attr) = mesh.attribute_mut(Mesh::ATTRIBUTE_COLOR) {
         *attr = VertexAttributeValues::Float32x4(colors_correct);
+    }
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EPS: f32 = 1e-4;
+
+    /// Regression: `(a - b).abs()` reported ~2π for two angles straddling the
+    /// ±π seam, which blanked the resultant field along that seam.
+    #[test]
+    fn angular_distance_takes_the_short_way_around() {
+        assert!((angular_distance(0.3, 0.1) - 0.2).abs() < EPS);
+        // Straddling the seam: the naive difference is 6.0, the real one is
+        // TAU - 6.0 ≈ 0.283.
+        assert!((angular_distance(-3.0, 3.0) - (TAU - 6.0)).abs() < EPS);
+        assert!((angular_distance(0.1, TAU - 0.1) - 0.2).abs() < EPS);
+        // Never exceeds half a turn, whatever the winding of the inputs.
+        for i in -20..20 {
+            let a = i as f32 * 0.7;
+            let d = angular_distance(a, 1.234);
+            assert!((0.0..=PI + EPS).contains(&d), "distance {d} out of range");
+        }
+    }
+
+    /// The `2p` lobes of one phase must tile the bore exactly once: adjacent
+    /// pole axes are one full lobe apart, and the lobes together span 2π.
+    #[test]
+    fn lobes_tile_the_bore_without_gaps_or_overlap() {
+        for pole_pairs in 1..=6_usize {
+            let p = pole_pairs as f32;
+            let half = lobe_half_span(pole_pairs);
+
+            let total = (2 * pole_pairs) as f32 * 2.0 * half;
+            assert!(
+                (total - TAU).abs() < EPS,
+                "p={pole_pairs}: lobes cover {total} rad, expected {TAU}"
+            );
+
+            // Consecutive poles of the same phase sit exactly one lobe apart.
+            let alpha_m = phase_displacement(3);
+            let axis0 = lobe_axis_angle(0, 0, alpha_m, 0.2, 0.05, p);
+            let axis1 = lobe_axis_angle(1, 0, alpha_m, 0.2, 0.05, p);
+            assert!(
+                (angular_distance(axis0, axis1) - 2.0 * half).abs() < EPS,
+                "p={pole_pairs}: adjacent axes are not one lobe apart"
+            );
+        }
+    }
+
+    /// Phase currents must be a plain cosine — the cubed version used by the
+    /// field renderer disagreed with the arrows, the waveform panel and the
+    /// current strip, which all use `cos`.
+    #[test]
+    fn phase_currents_are_balanced_cosines() {
+        for phases in [2_usize, 3, 5, 6] {
+            let alpha_m = phase_displacement(phases);
+
+            // Phase 0 peaks at t = 0.
+            assert!((phase_current(0.0, 0, alpha_m) - 1.0).abs() < EPS);
+
+            // Each phase peaks exactly one displacement later.
+            for phase in 0..phases {
+                let peak = phase as f32 * alpha_m;
+                assert!(
+                    (phase_current(peak, phase, alpha_m) - 1.0).abs() < EPS,
+                    "m={phases}, phase {phase} does not peak at its own angle"
+                );
+            }
+        }
+
+        // A balanced odd-phase set sums to zero at every instant.
+        let alpha_m = phase_displacement(3);
+        for step in 0..16 {
+            let t = step as f32 * TAU / 16.0;
+            let sum: f32 = (0..3).map(|k| phase_current(t, k, alpha_m)).sum();
+            assert!(sum.abs() < EPS, "3-phase currents sum to {sum} at t={t}");
+        }
     }
 }

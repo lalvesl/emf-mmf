@@ -208,27 +208,31 @@ fn draw_mmf_panel(
     // Winding functions: wf[phase][sample] — computed over [0, 2π]
     let mut wf: Vec<Vec<f32>> = vec![vec![0.0; WAVEFORM_SAMPLES]; m.max(1)];
 
-    let slot_angle = TAU / n as f32;
-
+    // Each conductor contributes a unit step at θ_s, so record the step at the
+    // first sample with θ ≥ θ_s and integrate once per phase afterwards. Doing
+    // it as a running sum keeps this O(n + m·samples) instead of O(n·samples),
+    // which matters because the window redraws every frame.
     for (s, assign_opt) in assignments.iter().enumerate() {
         let Some(assign) = assign_opt else { continue };
-        let theta_s = s as f32 * slot_angle;
         let sign = match assign.direction {
             Direction::Out => 1.0_f32,
             Direction::In => -1.0_f32,
         };
 
-        // Each conductor contributes a step at θ_s
-        // The winding function at sample i is the cumulative sum of conductors for θ < θ_sample.
-        for (i, sample) in wf[assign.phase]
-            .iter_mut()
-            .enumerate()
-            .take(WAVEFORM_SAMPLES)
-        {
-            let theta = i as f32 / WAVEFORM_SAMPLES as f32 * TAU;
-            if theta >= theta_s {
-                *sample += sign;
-            }
+        // Smallest i with `i / SAMPLES * TAU >= s / n * TAU`, computed in
+        // integers to avoid the float rounding of the previous comparison.
+        let step_at = (s * WAVEFORM_SAMPLES).div_ceil(n);
+        if step_at < WAVEFORM_SAMPLES {
+            wf[assign.phase][step_at] += sign;
+        }
+    }
+
+    // Integrate the steps into the piecewise-constant winding function.
+    for phase_wf in wf.iter_mut() {
+        let mut running = 0.0_f32;
+        for sample in phase_wf.iter_mut() {
+            running += *sample;
+            *sample = running;
         }
     }
 
@@ -430,6 +434,10 @@ fn draw_mmf_panel(
 // ─── Drawing helpers ─────────────────────────────────────────────────────────
 
 /// Draw a polyline from a closure that maps sample index → screen position.
+///
+/// Emitted as a single `Shape::line` rather than one shape per segment: at 720
+/// samples × (m + 1) curves the per-segment version pushed several thousand
+/// shapes through the tessellator every frame.
 fn draw_polyline(
     painter: &egui::Painter,
     f: impl Fn(usize) -> egui::Pos2,
@@ -437,8 +445,12 @@ fn draw_polyline(
     color: egui::Color32,
     width: f32,
 ) {
-    let points: Vec<egui::Pos2> = (0..=samples).map(|i| f(i.min(samples - 1))).collect();
-    for w in points.windows(2) {
-        painter.line_segment([w[0], w[1]], egui::Stroke::new(width, color));
+    if samples < 2 {
+        return;
     }
+    let points: Vec<egui::Pos2> = (0..samples).map(f).collect();
+    painter.add(egui::Shape::line(
+        points,
+        egui::Stroke::new(width, color),
+    ));
 }

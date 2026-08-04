@@ -150,6 +150,14 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "total_mmf") => "fmm total",
         (Language::En, "total_mmf") => "total mmf",
 
-        _ => panic!("Invalid key: {}", key),
+        // A missing key is a programming error, not a user-facing failure:
+        // fail loudly while developing, but never bring down a shipped build
+        // from inside the per-frame UI loop.
+        _ => {
+            if cfg!(debug_assertions) {
+                panic!("Invalid key: {key}");
+            }
+            "???"
+        }
     }
 }
