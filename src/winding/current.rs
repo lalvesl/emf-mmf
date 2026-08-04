@@ -2,7 +2,6 @@ use bevy::prelude::*;
 use std::f32::consts::PI;
 
 use super::{Direction, WindingPart};
-use crate::config::*;
 
 pub fn render_current_directions(
     commands: &mut Commands,
@@ -15,7 +14,7 @@ pub fn render_current_directions(
     }
 
     let layout = data.layout;
-    let wire_height = STATOR_HEIGHT * 0.95;
+    let wire_height = data.conductor_height();
 
     let top_y = wire_height / 2.0 + 0.002;
     let bottom_y = -wire_height / 2.0 - 0.002;

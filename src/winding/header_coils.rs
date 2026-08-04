@@ -5,15 +5,16 @@ use bevy::render::render_resource::PrimitiveTopology;
 use std::f32::consts::{PI, TAU};
 
 use super::WindingPart;
-use crate::config::*;
 
 // ─── Arc tube mesh builder ─────────────────────────────────────────────────────
 
 /// Builds a single tube mesh that follows the arc of an endwinding.
 ///
-/// The arc sweeps from `a_from` to `a_to` (handling wrap-around), parabola-
-/// lifted by `y_offset`, at radius `r_mid`.  The cross-section is a square with
-/// side `wire_size` approximated by `cross_sides` triangles.
+/// The centre-line runs: a straight `lead` out of the slot, the arc sweeping
+/// from `a_from` to `a_to` (handling wrap-around) lifted by `y_offset`, then a
+/// straight `lead` back down into the slot it returns to. Both straight runs
+/// are coaxial with the conductor they meet and end flush with the core face,
+/// so tube and conductor butt together into one continuous wire.
 struct ArcTubeParams {
     a_from: f32,
     a_diff: f32,
@@ -21,8 +22,11 @@ struct ArcTubeParams {
     r_from: f32,
     /// Radius at the end of the arc — the shallow coil side it returns into.
     r_to: f32,
+    /// Height where the arc begins, i.e. the top of the straight lead.
     y_base: f32,
     y_offset: f32,
+    /// Axial length of the straight run joining the arc to the conductor.
+    lead: f32,
     wire_size: f32,
     arc_segments: usize,
     cross_sides: usize,
@@ -38,20 +42,29 @@ fn build_arc_tube_mesh(params: ArcTubeParams) -> Mesh {
     let wire_size = params.wire_size;
     let arc_segments = params.arc_segments;
     let cross_sides = params.cross_sides;
-    // Centre-line points + Frenet frames
-    let n = arc_segments + 1;
-    let mut centers: Vec<Vec3> = Vec::with_capacity(n);
-    let mut tangents: Vec<Vec3> = Vec::with_capacity(n);
 
-    for seg in 0..n {
+    // The lead runs back towards the core, i.e. opposite the lift.
+    let lead = params.lead * -y_offset.signum();
+    let at = |r: f32, a: f32, y: f32| Vec3::new(r * a.cos(), y, r * a.sin());
+
+    // Centre-line points + Frenet frames
+    let mut centers: Vec<Vec3> = Vec::with_capacity(arc_segments + 3);
+
+    centers.push(at(r_from, a_from, y_base + lead));
+    for seg in 0..=arc_segments {
         let t = seg as f32 / arc_segments as f32;
         let a = a_from + a_diff * t;
         let y = y_base + y_offset * (PI * t).sin();
         // Sweep radially as well, so the arc meets the shallow conductor it
         // actually connects to rather than floating at a fixed radius.
         let r = r_from + (r_to - r_from) * t;
-        centers.push(Vec3::new(r * a.cos(), y, r * a.sin()));
+        centers.push(at(r, a, y));
     }
+    centers.push(at(r_to, a_from + a_diff, y_base + lead));
+
+    let n = centers.len();
+    let rings = n - 1;
+    let mut tangents: Vec<Vec3> = Vec::with_capacity(n);
 
     // Finite-difference tangents
     for i in 0..n {
@@ -105,7 +118,7 @@ fn build_arc_tube_mesh(params: ArcTubeParams) -> Mesh {
         let up = right.cross(tang).normalize_or_zero();
 
         let half = wire_size * 0.5;
-        let ring_u = i as f32 / arc_segments as f32;
+        let ring_u = i as f32 / rings as f32;
 
         for j in 0..ring_verts {
             let angle = j as f32 / ring_verts as f32 * TAU;
@@ -122,7 +135,7 @@ fn build_arc_tube_mesh(params: ArcTubeParams) -> Mesh {
     // Indices — connect rings into quads
     let mut indices: Vec<u32> = Vec::new();
     let rv = ring_verts as u32;
-    for i in 0..(arc_segments as u32) {
+    for i in 0..(rings as u32) {
         for j in 0..rv {
             let a = i * rv + j;
             let b = i * rv + (j + 1) % rv;
@@ -149,7 +162,7 @@ pub fn render_conductors(
     phase_mats: &[Handle<StandardMaterial>],
 ) {
     let layout = data.layout;
-    let wire_height = STATOR_HEIGHT * 0.95;
+    let wire_height = data.conductor_height();
 
     // Round conductors: a cylinder whose axis already runs along Y, which is
     // the axial direction of the machine. All of them are identical, so the
@@ -181,15 +194,19 @@ pub fn render_header_coils(
 
     let n = data.config.groove_count;
     let layout = data.layout;
-    let half_h = data.half_h;
     let pitch = data.pitch;
 
     // Arc geometry constants (shared across all arcs)
     let arc_segments = 24; // was 120 separate entities; now 24 segments per tube mesh
-    let cross_sides = 6; // hexagonal cross-section approximation
+    let cross_sides = 12; // the tube butts against a round conductor, so keep it round
 
     // Same gauge as the slot conductors, so a coil reads as one continuous wire.
     let wire_size = layout.wire_radius * 2.0;
+
+    // The tube picks up exactly where the conductor stops: flush with the core
+    // face, on the same axis, at the same gauge.
+    let lead = data.endwinding_lead();
+    let y_arc = data.endwinding_y();
 
     // One arc per conductor that starts a coil; it returns into the shallow
     // half of the slot `pitch` steps away.
@@ -224,10 +241,8 @@ pub fn render_header_coils(
         let lift = wire_size * 1.6
             + conductor.phase as f32 * wire_size * 1.1
             + conductor.index as f32 * wire_size * 0.8;
-        let y_base_top = half_h + 0.05;
-        let y_base_bot = -half_h - 0.05;
 
-        for (y_base, y_offset) in [(y_base_top, lift), (y_base_bot, -lift)] {
+        for (y_base, y_offset) in [(y_arc, lift), (-y_arc, -lift)] {
             let mesh = build_arc_tube_mesh(ArcTubeParams {
                 a_from,
                 a_diff,
@@ -235,6 +250,7 @@ pub fn render_header_coils(
                 r_to,
                 y_base,
                 y_offset,
+                lead,
                 wire_size,
                 arc_segments,
                 cross_sides,

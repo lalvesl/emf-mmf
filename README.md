@@ -78,6 +78,23 @@ extra conductor to the deep half.
 Endwinding arcs are drawn one per conductor, at the same gauge as the wire, and
 sweep radially so each arc actually meets the shallow conductor it connects to.
 
+With the endwindings shown, the slot conductors extend to sit flush with the
+core face and each arc begins with a straight axial run down to that same point,
+coaxial with the wire — the two butt together into a single continuous
+conductor. The straight run also lifts the arc clear of the face before it
+starts sweeping, so it does not cut through the teeth:
+
+```
+          ╭──────────────╮   ← arc (lift staggered by phase and conductor)
+          │              │
+          ╵              ╵   ← straight lead, clears the core face
+   ═══════╪══════════════╪═══  core face (y = STATOR_HEIGHT/2)
+          ║              ║   ← slot conductor, same axis and gauge
+```
+
+With the endwindings hidden the conductors shrink back inside the core so the
+current-direction symbols on their end faces stay readable.
+
 ## Tech Stack
 
 - **Rust**: Core language for performance and safety (edition 2024).

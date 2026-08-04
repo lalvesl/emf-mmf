@@ -289,6 +289,37 @@ impl WindingData<'_> {
     pub fn slot_center(&self, slot: usize) -> f32 {
         slot as f32 * self.segment_angle + self.tooth_angle + self.segment_angle * 0.25
     }
+
+    /// Axial length of a slot conductor.
+    ///
+    /// With the endwindings hidden the wire stays tucked inside the core, so
+    /// the current-direction symbols on its end faces read cleanly. With them
+    /// shown it must reach exactly the core face, where the endwinding tube
+    /// takes over — the two butt together into one continuous wire.
+    #[inline]
+    pub fn conductor_height(&self) -> f32 {
+        if self.config.show_endwindings {
+            STATOR_HEIGHT
+        } else {
+            STATOR_HEIGHT * 0.95
+        }
+    }
+
+    /// Straight axial run the endwinding makes on leaving the slot.
+    ///
+    /// The arc sweeps tangentially, so it has to clear the core face before it
+    /// starts turning or it would cut through the teeth. One and a half wire
+    /// radii puts the underside of the tube above the face with margin.
+    #[inline]
+    pub fn endwinding_lead(&self) -> f32 {
+        self.layout.wire_radius * 1.5
+    }
+
+    /// Height at which the endwinding arc proper begins, above the core face.
+    #[inline]
+    pub fn endwinding_y(&self) -> f32 {
+        self.half_h + self.endwinding_lead()
+    }
 }
 
 /// System: generate winding conductors and endwindings when config changes.
@@ -557,6 +588,86 @@ mod tests {
             .filter(|c| starts_coil(c, cfg.layers))
             .count();
         assert_eq!(starting, cfg.groove_count / 2);
+    }
+
+    fn winding_data<'a>(config: &'a MotorConfig, conductors: &'a [Conductor]) -> WindingData<'a> {
+        let segment_angle = TAU / config.groove_count as f32;
+        WindingData {
+            config,
+            conductors,
+            layout: SlotLayout::new(
+                config.layers,
+                segment_angle,
+                STATOR_BORE_RADIUS,
+                slot_bottom_radius(),
+            ),
+            segment_angle,
+            tooth_angle: segment_angle * 0.5,
+            half_h: STATOR_HEIGHT / 2.0,
+            pitch: coil_pitch(config),
+        }
+    }
+
+    /// The endwinding tube and the slot conductor must butt together into one
+    /// continuous wire: the conductor ends flush with the core face and the
+    /// tube's straight lead starts there, on the same axis and gauge.
+    #[test]
+    fn endwindings_meet_the_conductors_at_the_core_face() {
+        for count in [1_usize, 2, 4, 6] {
+            let mut cfg = config(24, 3, 2, count);
+            cfg.show_endwindings = true;
+            let assignments = compute_winding(&cfg);
+            let conductors = compute_conductors(&cfg, &assignments);
+            let data = winding_data(&cfg, &conductors);
+
+            let conductor_tip = data.conductor_height() / 2.0;
+            let lead_bottom = data.endwinding_y() - data.endwinding_lead();
+
+            assert!(
+                (conductor_tip - lead_bottom).abs() < 1e-6,
+                "layers={count}: conductor ends at {conductor_tip}, tube starts at {lead_bottom}"
+            );
+            assert!(
+                (conductor_tip - data.half_h).abs() < 1e-6,
+                "layers={count}: the joint should sit on the core face"
+            );
+        }
+    }
+
+    /// The arc sweeps tangentially, so it has to be clear of the core face
+    /// before it starts turning or it would cut straight through the teeth.
+    #[test]
+    fn the_arc_starts_above_the_core_face() {
+        for n in [12_usize, 24, 144] {
+            for count in [1_usize, 2, 4, 6] {
+                let mut cfg = config(n, 3, 2, count);
+                cfg.show_endwindings = true;
+                let assignments = compute_winding(&cfg);
+                let conductors = compute_conductors(&cfg, &assignments);
+                let data = winding_data(&cfg, &conductors);
+
+                // Underside of the tube where the arc begins, worst case: the
+                // tube is still horizontal there.
+                let underside = data.endwinding_y() - data.layout.wire_radius;
+                assert!(
+                    underside > data.half_h,
+                    "n={n} layers={count}: the arc grazes the core at {underside}"
+                );
+            }
+        }
+    }
+
+    /// Hiding the endwindings tucks the wire back inside the core, so the
+    /// current-direction symbols on its end faces stay readable.
+    #[test]
+    fn hidden_endwindings_keep_the_conductor_inside_the_core() {
+        let mut cfg = config(24, 3, 2, 4);
+        cfg.show_endwindings = false;
+        let assignments = compute_winding(&cfg);
+        let conductors = compute_conductors(&cfg, &assignments);
+        let data = winding_data(&cfg, &conductors);
+
+        assert!(data.conductor_height() / 2.0 < data.half_h);
     }
 
     /// A coil always leaves the deep half and returns into the shallow half.
