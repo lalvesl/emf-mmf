@@ -147,6 +147,15 @@ pub fn render_conductors(
     let r_bore = data.r_bore;
     let r_slot_bot = data.r_slot_bot;
 
+    let r_mid = (r_bore + r_slot_bot) / 2.0;
+    let wire_height = STATOR_HEIGHT * 0.95;
+    let wire_radial = (r_slot_bot - r_bore) * 0.55;
+    let wire_tangential = segment_angle * 0.35 * r_mid;
+
+    // Every conductor is the same cuboid, only placed differently — build the
+    // mesh once instead of one identical asset per slot.
+    let cube = meshes.add(Cuboid::new(wire_tangential, wire_height, wire_radial));
+
     // --- Conductors inside slots ---
     for (i, assignment) in assignments.iter().enumerate() {
         let Some(assign) = assignment else { continue };
@@ -154,19 +163,13 @@ pub fn render_conductors(
 
         // Slot center angle (slot sits after the tooth)
         let slot_center = i as f32 * segment_angle + tooth_angle + segment_angle * 0.25;
-        let r_mid = (r_bore + r_slot_bot) / 2.0;
-
-        let wire_height = STATOR_HEIGHT * 0.95;
-        let wire_radial = (r_slot_bot - r_bore) * 0.55;
-        let wire_tangential = segment_angle * 0.35 * r_mid;
 
         let x = r_mid * slot_center.cos();
         let z = r_mid * slot_center.sin();
 
         // Cuboid oriented radially
-        let cube = Cuboid::new(wire_tangential, wire_height, wire_radial);
         commands.spawn((
-            Mesh3d(meshes.add(cube)),
+            Mesh3d(cube.clone()),
             MeshMaterial3d(mat),
             Transform::from_xyz(x, 0.0, z)
                 .with_rotation(Quat::from_rotation_y(-slot_center + PI / 2.0)),
