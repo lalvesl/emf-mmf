@@ -5,6 +5,10 @@ edition = "2024"
 
 [features]
 default = []
+# Winding factors (k_d, k_p, k_w) and the harmonic spectrum of the winding
+# function. Demonstration material rather than everyday content, so it can be
+# built out with `--no-default-features` for a leaner tool.
+harmonics = []
 web = []
 dev = ["bevy/dynamic_linking"]
 test = ["dev"]
