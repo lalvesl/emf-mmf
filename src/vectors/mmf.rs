@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::f32::consts::PI;
 
 use crate::config::{MotorConfig, MotorConfigChanged};
 use crate::electrical::ElectricalState;
@@ -50,16 +51,19 @@ type HeadQuery<'w, 's> = Query<
 
 /// Poles that get a resultant arrow: the north of each pole pair.
 ///
-/// The `2p` pole axes alternate north/south, and a south arrow's direction is
-/// fully determined by the norths around it — it lands exactly between them.
-/// At one pole pair the south even coincides with the north, which is why two
-/// poles always looked like a single arrow while four or more fanned the
-/// duplicates out across the bore.
+/// The `2p` pole axes alternate north/south and are evenly spaced, so every
+/// south sits exactly halfway between two norths — it marks nothing the norths
+/// have not already fixed. Drawing all `2p` simply doubled the arrows, which
+/// went unnoticed at two poles (where the pair superimposed) and became obvious
+/// from four up, where the duplicates fan out across the bore.
 fn resultant_poles(pole_pairs: usize) -> impl Iterator<Item = usize> {
     (0..(2 * pole_pairs)).step_by(2)
 }
 
 /// MMF contribution of one phase at one pole, as a vector in the bore plane.
+///
+/// A single phase pulsates along a fixed axis — the arrow keeps its direction
+/// and swings its length with the current, flipping over when the current does.
 fn phase_vector(
     config: &MotorConfig,
     phase: usize,
@@ -72,6 +76,34 @@ fn phase_vector(
     // Consecutive poles invert the field direction.
     let amplitude = current * if pole.is_multiple_of(2) { 1.0 } else { -1.0 };
     Vec3::new(axis_phys.cos(), 0.0, axis_phys.sin()) * amplitude
+}
+
+/// Resultant MMF at one pole, as a vector in the bore plane.
+///
+/// The phasor sum has to be taken in *electrical* space. There the phase axes
+/// sit exactly one phase displacement apart, which is what makes a balanced
+/// set collapse to `Σ û(k·α_m)·cos(ωt − k·α_m) = (m/2)·û(ωt)`: one vector, of
+/// constant magnitude, turning at `ω`.
+///
+/// Adding up the arrows as they are *drawn* does not work. Their mechanical
+/// axes are compressed by `1/p` while the currents still shift by the full
+/// `α_m`, so the two spacings only agree at one pole pair. Beyond that the sum
+/// keeps a backward wave alongside the forward one, and the beat between them
+/// dragged the arrow down to 33% of full length at four poles and 4% at twelve.
+///
+/// Mechanically the wave turns at `ω/p` — the synchronous speed the rotor is
+/// already driven at, so the arrow and the rotor's north pole now coincide by
+/// construction rather than by coincidence.
+fn resultant_vector(config: &MotorConfig, pole: usize, elec_angle: f32) -> Vec3 {
+    let p = config.pole_pairs.max(1) as f32;
+
+    // Left unwrapped: the `pole·π` term is what spreads the poles around the
+    // bore once divided by `p`, so it must not be folded into `(-π, π]`.
+    let elec = pole as f32 * PI + axis::axis_offset_elec(config) + elec_angle;
+    let mech = elec / p + axis::slot_center(0, config.groove_count);
+
+    let magnitude = config.phases as f32 / 2.0;
+    Vec3::new(mech.cos(), 0.0, mech.sin()) * magnitude
 }
 
 fn regenerate_vectors(
@@ -209,13 +241,10 @@ fn animate_vectors(
     let alpha_m = axis::phase_displacement(m);
 
     let mut phase_vecs: Vec<Vec<Vec3>> = vec![vec![Vec3::ZERO; m]; 2 * p];
-    let mut resultant_vecs: Vec<Vec3> = vec![Vec3::ZERO; 2 * p];
 
-    for pole in 0..(2 * p) {
-        for (phase, phase_vec_entry) in phase_vecs[pole].iter_mut().enumerate().take(m) {
-            let vec = phase_vector(&config, phase, pole, elec_angle, alpha_m);
-            *phase_vec_entry = vec;
-            resultant_vecs[pole] += vec;
+    for (pole, pole_vecs) in phase_vecs.iter_mut().enumerate() {
+        for (phase, phase_vec_entry) in pole_vecs.iter_mut().enumerate() {
+            *phase_vec_entry = phase_vector(&config, phase, pole, elec_angle, alpha_m);
         }
     }
 
@@ -234,8 +263,9 @@ fn animate_vectors(
             }
             (phase_vecs[pole][phase], 1.0)
         } else {
-            // MMF magnitude max expected mathematically is roughly `m / 2`
-            (resultant_vecs[pole], m as f32 / 2.0)
+            // A balanced set always resolves to `m / 2`, so the resultant is
+            // drawn at full length and only ever turns.
+            (resultant_vector(&config, pole, elec_angle), m as f32 / 2.0)
         };
 
         let length = target_vec.length();
@@ -272,13 +302,12 @@ fn animate_vectors(
         }
     }
 }
-
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::f32::consts::{PI, TAU};
+    use std::f32::consts::TAU;
 
     const EPS: f32 = 1e-4;
 
@@ -296,16 +325,17 @@ mod tests {
         v.z.atan2(v.x)
     }
 
-    fn resultant(config: &MotorConfig, pole: usize, elec_angle: f32) -> Vec3 {
+    fn angle_between(a: f32, b: f32) -> f32 {
+        let d = (a - b).rem_euclid(TAU);
+        d.min(TAU - d)
+    }
+
+    /// What the arrows used to do: sum the drawn vectors in mechanical space.
+    fn mechanical_space_sum(config: &MotorConfig, pole: usize, elec_angle: f32) -> Vec3 {
         let alpha_m = axis::phase_displacement(config.phases);
         (0..config.phases)
             .map(|phase| phase_vector(config, phase, pole, elec_angle, alpha_m))
             .sum()
-    }
-
-    fn angle_between(a: f32, b: f32) -> f32 {
-        let d = (a - b).rem_euclid(TAU);
-        d.min(TAU - d)
     }
 
     /// One arrow per pole pair, and always the north of the pair.
@@ -321,59 +351,175 @@ mod tests {
         }
     }
 
-    /// Why two poles always looked like a single arrow: at one pole pair the
-    /// south resultant points exactly where the north does, so the second arrow
-    /// sat invisibly on top of the first.
+    /// A balanced polyphase set produces a rotating field of *constant*
+    /// amplitude — the arrow may only turn, never grow or shrink.
     #[test]
-    fn a_single_pole_pair_superimposes_its_two_arrows() {
-        let cfg = config(24, 3, 1);
-        for step in 0..6 {
-            let t = step as f32 * 0.9;
-            let north = resultant(&cfg, 0, t);
-            let south = resultant(&cfg, 1, t);
+    fn the_resultant_keeps_a_constant_length() {
+        for phases in [2_usize, 3, 5, 6] {
+            for pole_pairs in 1..=6_usize {
+                let cfg = config(24, phases, pole_pairs);
+                let expected = phases as f32 / 2.0;
+
+                for pole in resultant_poles(pole_pairs) {
+                    for step in 0..24 {
+                        let t = step as f32 * TAU / 24.0;
+                        let length = resultant_vector(&cfg, pole, t).length();
+                        assert!(
+                            (length - expected).abs() < EPS,
+                            "m={phases} p={pole_pairs} pole={pole} t={t}: \
+                             length {length}, expected {expected}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Regression: summing the arrows as drawn — at mechanical angles, while
+    /// the currents shift by the full electrical displacement — leaves a
+    /// backward wave beside the forward one. Their beat collapsed the arrow to
+    /// a few percent of full length, and worse the more poles there were.
+    #[test]
+    fn summing_in_mechanical_space_would_collapse_the_arrow() {
+        let phases = 3_usize;
+        let full = phases as f32 / 2.0;
+
+        // One pole pair is the case where the two spacings agree, so the old
+        // sum was correct there — which is why the bug stayed hidden.
+        let cfg = config(24, phases, 1);
+        for step in 0..24 {
+            let t = step as f32 * TAU / 24.0;
             assert!(
-                angle_between(heading(north), heading(south)) < EPS,
-                "t={t}: the two arrows are not superimposed"
+                (mechanical_space_sum(&cfg, 0, t).length() - full).abs() < EPS,
+                "one pole pair should already have been constant"
+            );
+        }
+
+        // From two pole pairs up it pulses, and the collapse deepens with p.
+        let mut worst_previous = 1.0_f32;
+        for pole_pairs in [2_usize, 3, 4, 6] {
+            let cfg = config(24 * pole_pairs, phases, pole_pairs);
+            let worst = (0..360)
+                .map(|step| {
+                    let t = step as f32 * TAU / 360.0;
+                    mechanical_space_sum(&cfg, 0, t).length() / full
+                })
+                .fold(f32::INFINITY, f32::min);
+
+            assert!(
+                worst < 0.4,
+                "p={pole_pairs}: old sum only dropped to {worst}, expected a collapse"
+            );
+            assert!(
+                worst < worst_previous,
+                "p={pole_pairs}: collapse should deepen with pole count"
+            );
+            worst_previous = worst;
+
+            // The fix holds steady over the same sweep.
+            for step in 0..360 {
+                let t = step as f32 * TAU / 360.0;
+                assert!((resultant_vector(&cfg, 0, t).length() - full).abs() < EPS);
+            }
+        }
+    }
+
+    /// The field turns at the synchronous mechanical speed: one electrical
+    /// revolution advances it by exactly one pole-pair pitch.
+    #[test]
+    fn the_resultant_turns_at_synchronous_speed() {
+        for pole_pairs in 1..=6_usize {
+            let cfg = config(24, 3, pole_pairs);
+            let start = heading(resultant_vector(&cfg, 0, 0.0));
+            let after = heading(resultant_vector(&cfg, 0, TAU));
+
+            // One electrical revolution is one pole-pair pitch mechanically,
+            // so the arrow lands where its neighbouring north stood — not back
+            // on itself, unless there is only one pole pair.
+            let expected = start + TAU / pole_pairs as f32;
+            assert!(
+                angle_between(after, expected) < EPS,
+                "p={pole_pairs}: a full electrical turn must advance one pole-pair pitch"
+            );
+
+            // Half an electrical turn puts it halfway between two norths.
+            let half = heading(resultant_vector(&cfg, 0, PI));
+            assert!(
+                (angle_between(start, half) - PI / pole_pairs as f32).abs() < EPS,
+                "p={pole_pairs}: half a cycle should advance half a pole-pair pitch"
             );
         }
     }
 
-    /// From four poles up they no longer overlap — which is the clutter the
-    /// north-only rule removes. The souths sit exactly halfway between the
-    /// norths, so they add no information.
+    /// The drawn norths tile the bore evenly, one per pole pair.
     #[test]
-    fn souths_fan_out_from_four_poles_up_but_stay_between_the_norths() {
+    fn norths_are_evenly_spread_around_the_bore() {
         for pole_pairs in 2..=6_usize {
-            let cfg = config(24 * pole_pairs.div_ceil(2), 3, pole_pairs);
+            let cfg = config(24, 3, pole_pairs);
             let t = 0.7;
+            let poles: Vec<_> = resultant_poles(pole_pairs).collect();
 
-            let north = heading(resultant(&cfg, 0, t));
-            let south = heading(resultant(&cfg, 1, t));
-            assert!(
-                angle_between(north, south) > EPS,
-                "p={pole_pairs}: the south still overlaps the north"
-            );
-
-            // Consecutive norths are one pole-pair pitch apart around the bore.
-            if pole_pairs > 1 {
-                let next_north = heading(resultant(&cfg, 2, t));
+            for pair in poles.windows(2) {
+                let a = heading(resultant_vector(&cfg, pair[0], t));
+                let b = heading(resultant_vector(&cfg, pair[1], t));
+                let expected = (TAU / pole_pairs as f32).min(TAU - TAU / pole_pairs as f32);
                 assert!(
-                    (angle_between(north, next_north) - TAU / pole_pairs as f32).abs() < EPS
-                        || (angle_between(north, next_north) - (TAU - TAU / pole_pairs as f32))
-                            .abs()
-                            < EPS,
-                    "p={pole_pairs}: norths are not evenly spread"
+                    (angle_between(a, b) - expected).abs() < EPS,
+                    "p={pole_pairs}: norths {} and {} are not one pitch apart",
+                    pair[0],
+                    pair[1]
                 );
             }
+        }
+    }
 
-            // And the south bisects them: it trails the north by exactly half
-            // a pole-pair pitch, plus the half turn that makes it a south.
-            let expected = (north + PI / pole_pairs as f32 + PI).rem_euclid(TAU);
+    /// The rotor is spun to `state.angle / p` past the phase-A magnetic axis.
+    /// The resultant arrow must land on that same spot, or the rotor's north
+    /// and the arrow marking it would drift apart.
+    #[test]
+    fn the_resultant_tracks_the_rotor_north() {
+        for pole_pairs in 1..=6_usize {
+            let cfg = config(24, 3, pole_pairs);
+            for step in 0..12 {
+                let t = step as f32 * TAU / 12.0;
+                // Exactly what `rotor::render` uses to place its north pole.
+                let rotor_north = axis::magnetic_axis(&cfg, 0, 0) + t / pole_pairs as f32;
+                let arrow = heading(resultant_vector(&cfg, 0, t));
+                assert!(
+                    angle_between(rotor_north, arrow) < EPS,
+                    "p={pole_pairs} t={t}: arrow and rotor north disagree"
+                );
+            }
+        }
+    }
+
+    /// A single phase pulsates along a fixed axis — that one is meant to
+    /// breathe, unlike the resultant.
+    #[test]
+    fn a_phase_pulsates_on_a_fixed_axis() {
+        let cfg = config(24, 3, 2);
+        let alpha_m = axis::phase_displacement(cfg.phases);
+        let expected_axis = axis::magnetic_axis(&cfg, 0, 0);
+
+        let mut saw_short = false;
+        for step in 0..24 {
+            let t = step as f32 * TAU / 24.0;
+            let v = phase_vector(&cfg, 0, 0, t, alpha_m);
+            if v.length() < 0.2 {
+                saw_short = true;
+                continue;
+            }
+            // Always on the same line, pointing one way or the other.
+            let along = angle_between(heading(v), expected_axis);
             assert!(
-                angle_between(south, expected) < EPS,
-                "p={pole_pairs}: the south is not determined by the norths"
+                along < EPS || (along - PI).abs() < EPS,
+                "t={t}: phase arrow left its axis"
             );
         }
+        assert!(
+            saw_short,
+            "a phase arrow should shrink as its current falls"
+        );
     }
 
     /// The head must keep its proportions at every arrow length — a Y-only
