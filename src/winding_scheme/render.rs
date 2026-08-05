@@ -1,12 +1,11 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
-use std::f32::consts::TAU;
 
 use crate::config::MotorConfig;
 use crate::electrical::ElectricalState;
 use crate::i18n::{self, Language};
 use crate::phase;
-use crate::winding::{Direction, compute_conductors, compute_winding};
+use crate::winding::{Direction, SlotPacking, axis, compute_conductors, compute_winding};
 
 pub struct WindingSchemePlugin;
 
@@ -44,7 +43,7 @@ fn winding_scheme_window(
 
             // ── Top panel: conductor layout ─────────────────────────────────
             // Height grows with the stack so a 6-conductor slot still fits.
-            let rows = config.layers.max(1).div_ceil(2);
+            let rows = SlotPacking::new(config.layers).rows;
             let conductor_panel_height = 46.0 + rows as f32 * 22.0;
             let (rect_top, _) = ui.allocate_exact_size(
                 egui::vec2(ui.available_width(), conductor_panel_height),
@@ -82,10 +81,8 @@ fn draw_conductor_panel(
     let padding = 24.0;
     let slot_step = (rect.width() - padding * 2.0) / n as f32;
 
-    // Mirror the 3D packing: two conductors per row, deepest row first.
-    let count = config.layers.max(1);
-    let cols = count.min(2);
-    let rows = count.div_ceil(cols);
+    // The same packing the 3D view uses, not a second copy of the arithmetic.
+    let packing = SlotPacking::new(config.layers);
 
     let row_step = 20.0_f32;
     let sym_r = (slot_step * 0.38).min(row_step * 0.42);
@@ -104,17 +101,11 @@ fn draw_conductor_panel(
     for conductor in conductors {
         let slot_x = rect.left() + padding + (conductor.slot as f32 + 0.5) * slot_step;
 
-        let row = conductor.index / cols;
-        let col = conductor.index % cols;
-        let in_row = if row == rows - 1 {
-            count - row * cols
-        } else {
-            cols
-        };
+        let (row, _) = packing.row_col(conductor.index);
 
         // Row 0 is the slot bottom, drawn at the top of the stack.
-        let x = slot_x + (col as f32 - (in_row as f32 - 1.0) / 2.0) * col_step;
-        let y = cy - 12.0 - (rows - 1 - row) as f32 * row_step;
+        let x = slot_x + packing.column_offset(conductor.index) * col_step;
+        let y = cy - 12.0 - (packing.rows - 1 - row) as f32 * row_step;
 
         let base_color = phase::colors::phase_color_egui(conductor.phase, config.phases);
 
@@ -234,16 +225,9 @@ fn draw_mmf_panel(
     }
 
     // Instantaneous phase currents: i_k(t) = cos(elec_angle - k * alpha_m)
-    let alpha_m = if m > 0 && !m.is_multiple_of(2) {
-        TAU / m as f32
-    } else if m > 0 {
-        std::f32::consts::PI / m as f32
-    } else {
-        TAU
-    };
-
+    let alpha_m = axis::phase_displacement(m);
     let currents: Vec<f32> = (0..m)
-        .map(|k| (elec_angle - k as f32 * alpha_m).cos())
+        .map(|k| axis::phase_current(elec_angle, k, alpha_m))
         .collect();
 
     // Per-phase MMF and total MMF
