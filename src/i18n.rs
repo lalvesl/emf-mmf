@@ -65,7 +65,6 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "show_vectors") => "Mostrar vetores FMM",
         (Language::En, "show_vectors") => "Show MMF vectors",
 
-
         (Language::PtBr, "toggle_headers_hover") => {
             "Alternar visibilidade dos arcos de enrolamento"
         }
@@ -116,7 +115,6 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
 
         (Language::PtBr, "mmf_result") => "Resultado",
         (Language::En, "mmf_result") => "Result",
-
 
         (Language::PtBr, "mmf_gradient_intensity_hover") => {
             "Controla a concentração do gradiente de campo: valores maiores deixam o campo mais concentrado no eixo magnético"

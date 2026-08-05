@@ -420,8 +420,5 @@ fn draw_polyline(
         return;
     }
     let points: Vec<egui::Pos2> = (0..samples).map(f).collect();
-    painter.add(egui::Shape::line(
-        points,
-        egui::Stroke::new(width, color),
-    ));
+    painter.add(egui::Shape::line(points, egui::Stroke::new(width, color)));
 }

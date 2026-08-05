@@ -271,15 +271,8 @@ mod tests {
 
         for i in [0_usize, 1, 7, 23] {
             let a_start = i as f32 * segment_angle;
-            let expected = generate_sector_mesh(
-                2.0,
-                2.6,
-                a_start,
-                a_start + tooth_angle,
-                -1.0,
-                1.0,
-                4,
-            );
+            let expected =
+                generate_sector_mesh(2.0, 2.6, a_start, a_start + tooth_angle, -1.0, 1.0, 4);
             let expected_pos = expected
                 .attribute(Mesh::ATTRIBUTE_POSITION)
                 .and_then(|a| a.as_float3())

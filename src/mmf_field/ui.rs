@@ -51,10 +51,7 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Language) -> b
         // ── Result row ──────────────────────────────────────────────────────
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            if ui
-                .checkbox(&mut config.mmf_field.show_result, "")
-                .changed()
-            {
+            if ui.checkbox(&mut config.mmf_field.show_result, "").changed() {
                 changed = true;
             }
 
@@ -73,8 +70,7 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Language) -> b
             .add(
                 egui::Slider::new(
                     &mut config.mmf_field.gradient_intensity,
-                    MmfFieldConfig::MIN.gradient_intensity
-                        ..=MmfFieldConfig::MAX.gradient_intensity,
+                    MmfFieldConfig::MIN.gradient_intensity..=MmfFieldConfig::MAX.gradient_intensity,
                 )
                 .step_by(0.1)
                 .text("γ"),

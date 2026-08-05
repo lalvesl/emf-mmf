@@ -185,7 +185,11 @@ They call `cargo` directly and do not need the Dioxus CLI:
     diagram and the 3D view cannot disagree.
 - `src/electrical.rs`: Electrical angle animation and the current waveform strip.
 - `src/mmf_field/`: MMF field overlay meshes (per phase and resultant).
-- `src/vectors/`: 3D MMF arrows per phase and pole.
+- `src/vectors/`: 3D MMF arrows. One per phase per pole; the resultant gets one
+  arrow per pole *pair*, marking the north axis. A south's direction is fully
+  determined by the norths around it — at one pole pair it lands exactly on the
+  north (which is why two poles always looked like a single arrow), and from
+  four poles up the duplicates just fan out across the bore.
 - `src/rotor/`: Rotor geometry, synchronised to the resultant MMF.
 - `src/winding_scheme/`: 2D winding diagram and MMF waveform window.
 - `src/phase/`: Phase colours and letters.

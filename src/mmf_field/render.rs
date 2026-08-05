@@ -124,7 +124,8 @@ fn regenerate_field(
 
             let axis_angle = magnetic_axis(&config, phase, pole);
 
-            let color_srgba: bevy::color::Srgba = crate::phase::colors::phase_color(phase, m).into();
+            let color_srgba: bevy::color::Srgba =
+                crate::phase::colors::phase_color(phase, m).into();
             let base_color = [color_srgba.red, color_srgba.green, color_srgba.blue, 1.0];
 
             let mesh = build_sector_mesh(SectorMeshParams {

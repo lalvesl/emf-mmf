@@ -6,7 +6,10 @@ pub fn winding_scheme_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Lan
     let mut changed = false;
 
     if ui
-        .checkbox(&mut config.show_winding_scheme, t(lang, "show_winding_scheme"))
+        .checkbox(
+            &mut config.show_winding_scheme,
+            t(lang, "show_winding_scheme"),
+        )
         .on_hover_text(t(lang, "show_winding_scheme_hover"))
         .changed()
     {

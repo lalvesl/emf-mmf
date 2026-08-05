@@ -491,7 +491,10 @@ mod tests {
             assert_eq!(wires.len(), 4, "slot {slot}");
             let first = wires[0];
             for w in &wires {
-                assert_eq!(w.phase, first.phase, "slot {slot} mixed phases at full pitch");
+                assert_eq!(
+                    w.phase, first.phase,
+                    "slot {slot} mixed phases at full pitch"
+                );
                 assert_eq!(w.direction, first.direction, "slot {slot} mixed directions");
             }
         }
@@ -547,7 +550,10 @@ mod tests {
             let wires = slot_of(&conductors, 0);
             let deep = wires.iter().filter(|w| w.layer == 0).count();
             let shallow = wires.iter().filter(|w| w.layer == 1).count();
-            assert_eq!(deep, shallow, "layers={count} unbalanced: {deep} vs {shallow}");
+            assert_eq!(
+                deep, shallow,
+                "layers={count} unbalanced: {deep} vs {shallow}"
+            );
         }
     }
 
@@ -800,7 +806,10 @@ mod tests {
             let b = compute_conductors(&chorded, &compute_winding(&chorded));
             assert_eq!(a.len(), b.len());
             for (x, y) in a.iter().zip(b.iter()) {
-                assert_eq!((x.slot, x.phase, x.direction), (y.slot, y.phase, y.direction));
+                assert_eq!(
+                    (x.slot, x.phase, x.direction),
+                    (y.slot, y.phase, y.direction)
+                );
             }
         }
     }
@@ -833,8 +842,8 @@ mod tests {
 
                 for start in conductors.iter().filter(|c| starts_coil(c, cfg.layers)) {
                     let return_slot = (start.slot + pitch) % n;
-                    let partner = SlotLayout::new(count, TAU / n as f32, 2.0, 2.6)
-                        .coil_partner(start.index);
+                    let partner =
+                        SlotLayout::new(count, TAU / n as f32, 2.0, 2.6).coil_partner(start.index);
                     let far_side = conductors
                         .iter()
                         .find(|c| c.slot == return_slot && c.index == partner)

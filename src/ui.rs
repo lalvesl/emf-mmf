@@ -149,8 +149,7 @@ fn ui_panel(
                 ui.label(format!("{} (S)", t(&lang, "grooves")));
                 let response = ui.add(egui::Slider::new(
                     &mut grooves,
-                    (MotorConfig::MIN.groove_count as i32)
-                        ..=(MotorConfig::MAX.groove_count as i32),
+                    (MotorConfig::MIN.groove_count as i32)..=(MotorConfig::MAX.groove_count as i32),
                 ));
                 if response.changed() {
                     config.groove_count = grooves as usize;
