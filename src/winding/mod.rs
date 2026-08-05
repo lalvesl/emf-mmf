@@ -3,6 +3,7 @@ use std::f32::consts::TAU;
 
 use crate::{config::*, phase};
 
+pub mod axis;
 pub mod current;
 pub mod header_coils;
 pub mod ui;
@@ -51,16 +52,94 @@ pub struct Conductor {
     pub direction: Direction,
 }
 
-/// Geometric packing of the round conductors inside one slot.
+/// How the conductors of one slot are arranged, independent of any dimensions.
 ///
-/// Conductors are laid out two per row across the slot width, filling from the
-/// slot bottom towards the bore: `count = 4` gives 2×2, `count = 6` gives 2×3.
-/// A trailing odd conductor is centred in its row.
-#[derive(Clone, Copy, Debug)]
-pub struct SlotLayout {
+/// Conductors are laid out two per row, filling from the slot bottom towards
+/// the bore: `count = 4` gives 2×2, `count = 6` gives 2×3. A trailing odd
+/// conductor is centred in its row.
+///
+/// This is deliberately free of radii and wire gauges so the 2D winding diagram
+/// can draw the same arrangement as the 3D view from the same source, rather
+/// than reproducing the arithmetic and silently drifting from it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SlotPacking {
     pub count: usize,
     pub rows: usize,
     pub cols: usize,
+}
+
+impl SlotPacking {
+    pub fn new(count: usize) -> Self {
+        let count = count.max(1);
+        let cols = count.min(2);
+        Self {
+            count,
+            rows: count.div_ceil(cols),
+            cols,
+        }
+    }
+
+    /// Grid position of `index` as `(row, col)`; row 0 is the slot bottom.
+    #[inline]
+    pub fn row_col(&self, index: usize) -> (usize, usize) {
+        (index / self.cols, index % self.cols)
+    }
+
+    /// How many conductors share the row containing `index`.
+    pub fn row_occupancy(&self, row: usize) -> usize {
+        if row == self.rows - 1 {
+            self.count - row * self.cols
+        } else {
+            self.cols
+        }
+    }
+
+    /// Tangential offset of `index` from the slot centre, in column pitches.
+    ///
+    /// A row that is not full is centred, so a lone trailing conductor sits on
+    /// the slot axis rather than hugging one tooth.
+    pub fn column_offset(&self, index: usize) -> f32 {
+        let (row, col) = self.row_col(index);
+        let in_row = self.row_occupancy(row);
+        col as f32 - (in_row as f32 - 1.0) / 2.0
+    }
+
+    /// Number of conductors in the deep (layer 0) half.
+    ///
+    /// Both coil sides must carry the same number of turns, so an odd `count`
+    /// gives the deep half the extra conductor rather than splitting by row.
+    #[inline]
+    pub fn deep_count(&self) -> usize {
+        self.count.div_ceil(2)
+    }
+
+    /// Which electrical layer `index` belongs to: 0 deep, 1 shallow.
+    ///
+    /// With a single conductor per slot there is no second layer.
+    #[inline]
+    pub fn layer_of(&self, index: usize) -> usize {
+        usize::from(index >= self.deep_count() && self.count > 1)
+    }
+
+    /// Index in the destination slot that conductor `index` connects to.
+    ///
+    /// A coil leaves the deep half of one slot and returns into the shallow
+    /// half of the slot `pitch` steps away. With a single conductor per slot
+    /// there is only one layer, so it connects straight across.
+    pub fn coil_partner(&self, index: usize) -> usize {
+        if self.count == 1 {
+            return 0;
+        }
+        let deep = self.deep_count();
+        let shallow = self.count - deep;
+        deep + (index % shallow.max(1))
+    }
+}
+
+/// [`SlotPacking`] placed into the real slot, with wire gauge and radii.
+#[derive(Clone, Copy, Debug)]
+pub struct SlotLayout {
+    pub packing: SlotPacking,
     /// Radius of a single round conductor.
     pub wire_radius: f32,
     row_pitch: f32,
@@ -71,9 +150,8 @@ pub struct SlotLayout {
 impl SlotLayout {
     /// Packing that fits `count` conductors between the bore and slot bottom.
     pub fn new(count: usize, segment_angle: f32, r_bore: f32, r_slot_bot: f32) -> Self {
-        let count = count.max(1);
-        let cols = count.min(2);
-        let rows = count.div_ceil(cols);
+        let packing = SlotPacking::new(count);
+        let (rows, cols) = (packing.rows, packing.cols);
 
         let radial_span = r_slot_bot - r_bore;
         let row_pitch = radial_span / rows as f32;
@@ -90,9 +168,7 @@ impl SlotLayout {
         let wire_radius = 0.5 * row_pitch.min(col_pitch) * 0.82;
 
         Self {
-            count,
-            rows,
-            cols,
+            packing,
             wire_radius,
             row_pitch,
             col_pitch,
@@ -100,27 +176,13 @@ impl SlotLayout {
         }
     }
 
-    /// How many conductors share the row containing `index`.
-    fn row_occupancy(&self, row: usize) -> usize {
-        if row == self.rows - 1 {
-            self.count - row * self.cols
-        } else {
-            self.cols
-        }
-    }
-
     /// Centre of conductor `index` as `(radius, tangential offset)`.
     ///
     /// The offset is an arc length, so the angle is `offset / radius`.
     pub fn placement(&self, index: usize) -> (f32, f32) {
-        let row = index / self.cols;
-        let col = index % self.cols;
+        let (row, _) = self.packing.row_col(index);
         let radius = self.r_slot_bot - (row as f32 + 0.5) * self.row_pitch;
-
-        let in_row = self.row_occupancy(row);
-        let offset = (col as f32 - (in_row as f32 - 1.0) / 2.0) * self.col_pitch;
-
-        (radius, offset)
+        (radius, self.packing.column_offset(index) * self.col_pitch)
     }
 
     /// World-space centre of conductor `index` in the slot at `slot_center`.
@@ -130,27 +192,14 @@ impl SlotLayout {
         Vec3::new(radius * angle.cos(), y, radius * angle.sin())
     }
 
-    /// Number of conductors in the deep (layer 0) half.
-    ///
-    /// Both coil sides must carry the same number of turns, so an odd `count`
-    /// gives the deep half the extra conductor rather than splitting by row.
     #[inline]
     pub fn deep_count(&self) -> usize {
-        self.count.div_ceil(2)
+        self.packing.deep_count()
     }
 
-    /// Index in the destination slot that conductor `index` connects to.
-    ///
-    /// A coil leaves the deep half of one slot and returns into the shallow
-    /// half of the slot `pitch` steps away. With a single conductor per slot
-    /// there is only one layer, so it connects straight across.
+    #[inline]
     pub fn coil_partner(&self, index: usize) -> usize {
-        if self.count == 1 {
-            return 0;
-        }
-        let deep = self.deep_count();
-        let shallow = self.count - deep;
-        deep + (index % shallow.max(1))
+        self.packing.coil_partner(index)
     }
 }
 
@@ -218,15 +267,14 @@ pub fn compute_conductors(
         return Vec::new();
     }
 
-    let count = config.layers.max(1);
-    let deep = count.div_ceil(2);
+    let packing = SlotPacking::new(config.layers);
+    let count = packing.count;
     let pitch = coil_pitch(config) % n;
 
     let mut conductors = Vec::with_capacity(n * count);
     for slot in 0..n {
         for index in 0..count {
-            // With one conductor per slot there is no second layer.
-            let layer = usize::from(index >= deep && count > 1);
+            let layer = packing.layer_of(index);
 
             let assignment = if layer == 0 {
                 assignments[slot].clone()
@@ -302,7 +350,7 @@ impl WindingData<'_> {
     /// Centre angle of `slot`; the slot sits just after its tooth.
     #[inline]
     pub fn slot_center(&self, slot: usize) -> f32 {
-        slot as f32 * self.segment_angle + self.tooth_angle + self.segment_angle * 0.25
+        axis::slot_center(slot, self.config.groove_count)
     }
 
     /// Axial length of a slot conductor.
@@ -503,14 +551,57 @@ mod tests {
         }
     }
 
+    /// The 2D diagram and the 3D view must place a conductor the same way.
+    /// They used to derive rows/cols/centring independently, so a change to one
+    /// would silently desynchronise the other.
+    #[test]
+    fn the_metric_layout_places_conductors_where_the_packing_says() {
+        for count in 1..=6_usize {
+            let packing = SlotPacking::new(count);
+            let layout = SlotLayout::new(count, TAU / 24.0, 2.0, 2.6);
+
+            assert_eq!(layout.packing, packing, "layers={count}");
+
+            for index in 0..count {
+                let (row, _) = packing.row_col(index);
+                let (radius, offset) = layout.placement(index);
+
+                // Deeper rows sit further out, and the tangential offset is the
+                // packing's column offset scaled by the real column pitch.
+                let expected_radius = 2.6 - (row as f32 + 0.5) * layout.row_pitch;
+                assert!((radius - expected_radius).abs() < 1e-5, "layers={count}");
+                assert!(
+                    (offset - packing.column_offset(index) * layout.col_pitch).abs() < 1e-5,
+                    "layers={count} index={index}"
+                );
+            }
+        }
+    }
+
+    /// A row that is not full must be centred on the slot axis.
+    #[test]
+    fn a_lone_trailing_conductor_sits_on_the_slot_axis() {
+        // 1, 3 and 5 all end with a single conductor in the last row.
+        for count in [1_usize, 3, 5] {
+            let packing = SlotPacking::new(count);
+            assert!(
+                packing.column_offset(count - 1).abs() < 1e-6,
+                "layers={count}: last conductor is off-axis"
+            );
+        }
+        // An even count fills its last row, so the two straddle the axis.
+        let packing = SlotPacking::new(4);
+        assert!((packing.column_offset(2) + packing.column_offset(3)).abs() < 1e-6);
+    }
+
     /// The described packing: two per row, filling from the slot bottom.
     #[test]
     fn packing_is_two_per_row() {
         let cases = [(1_usize, 1_usize, 1_usize), (2, 1, 2), (4, 2, 2), (6, 3, 2)];
         for (count, rows, cols) in cases {
-            let layout = SlotLayout::new(count, TAU / 24.0, 2.0, 2.6);
-            assert_eq!(layout.rows, rows, "layers={count}");
-            assert_eq!(layout.cols, cols, "layers={count}");
+            let packing = SlotPacking::new(count);
+            assert_eq!(packing.rows, rows, "layers={count}");
+            assert_eq!(packing.cols, cols, "layers={count}");
         }
     }
 
