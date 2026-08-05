@@ -1,8 +1,8 @@
 use bevy::prelude::*;
-use std::f32::consts::{PI, TAU};
 
 use crate::config::{MotorConfig, MotorConfigChanged};
 use crate::electrical::ElectricalState;
+use crate::winding::axis;
 
 pub struct MmfVectorsPlugin;
 
@@ -139,37 +139,15 @@ fn animate_vectors(
     let elec_angle = state.angle;
     let max_radius = crate::config::STATOR_BORE_RADIUS * 0.9;
 
-    let n = config.groove_count as f32;
-    let m_f32 = m as f32;
-    let p_f32 = p as f32;
-    let q = n / (2.0 * p_f32 * m_f32);
-    let pitch = crate::winding::coil_pitch(&config) as f32;
-
-    let alpha = (p_f32 * TAU) / n;
-    let alpha_m = if !config.phases.is_multiple_of(2) {
-        TAU / m_f32
-    } else {
-        PI / m_f32
-    };
-
-    let offset_mech = (TAU / n) * 0.75; // Matches winding.rs slot offset
+    let alpha_m = axis::phase_displacement(m);
 
     let mut phase_vecs: Vec<Vec<Vec3>> = vec![vec![Vec3::ZERO; m]; 2 * p];
     let mut resultant_vecs: Vec<Vec3> = vec![Vec3::ZERO; 2 * p];
 
     for pole in 0..(2 * p) {
         for (phase, phase_vec_entry) in phase_vecs[pole].iter_mut().enumerate().take(m) {
-            let phase_shift_elec = phase as f32 * alpha_m;
-            let current = (elec_angle - phase_shift_elec).cos();
-
-            // Start of the coil group (electrical)
-            let start_elec = phase_shift_elec + (pole as f32 * PI);
-
-            // Magnetic axis offset from start
-            let offset_elec = (q - 1.0 + pitch) / 2.0 * alpha;
-            let center_elec = start_elec + offset_elec;
-
-            let axis_phys = (center_elec / p_f32) + offset_mech;
+            let current = axis::phase_current(elec_angle, phase, alpha_m);
+            let axis_phys = axis::magnetic_axis(&config, phase, pole);
 
             let mmf_amplitude = current * if pole % 2 == 0 { 1.0 } else { -1.0 };
 
