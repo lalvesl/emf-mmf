@@ -74,6 +74,42 @@ pub enum PanelLayout {
     Bottom,
 }
 
+/// Winding factors for the fundamental: what fraction of the ideal MMF this
+/// winding actually produces, and where it went. `k_p` drops below 1 only when
+/// the coils are chorded.
+#[cfg(feature = "harmonics")]
+fn winding_factor_labels(ui: &mut egui::Ui, config: &MotorConfig, lang: &Language) {
+    use crate::winding::axis;
+
+    let k_d = axis::distribution_factor(config, 1);
+    let k_p = axis::pitch_factor(config, 1);
+
+    ui.label(format!(
+        "{} (k_d): {:.4}",
+        t(lang, "distribution_factor"),
+        k_d.abs()
+    ))
+    .on_hover_text(t(lang, "distribution_factor_hover"));
+    ui.label(format!(
+        "{} (k_p): {:.4}",
+        t(lang, "pitch_factor"),
+        k_p.abs()
+    ))
+    .on_hover_text(t(lang, "pitch_factor_hover"));
+    ui.label(
+        egui::RichText::new(format!(
+            "{} (k_w=k_d.k_p): {:.4}",
+            t(lang, "winding_factor"),
+            (k_d * k_p).abs()
+        ))
+        .strong(),
+    )
+    .on_hover_text(t(lang, "winding_factor_hover"));
+}
+
+#[cfg(not(feature = "harmonics"))]
+fn winding_factor_labels(_: &mut egui::Ui, _: &MotorConfig, _: &Language) {}
+
 fn reset_panel_space(mut contexts: EguiContexts, mut space: ResMut<PanelSpace>) {
     if let Ok(ctx) = contexts.ctx_mut() {
         space.0 = ctx.viewport_rect();
@@ -292,6 +328,9 @@ fn ui_panel(
                     ui.label(poles_str);
                     ui.label(alpha_str);
                     ui.label(alpha_m_str);
+
+                    winding_factor_labels(ui, &config, &lang);
+
                     ui.colored_label(egui::Color32::GREEN, t(&lang, "valid_config"));
                 } else {
                     ui.colored_label(egui::Color32::YELLOW, t(&lang, "invalid_config"));

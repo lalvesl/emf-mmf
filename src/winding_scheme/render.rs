@@ -1,11 +1,15 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+#[cfg(feature = "harmonics")]
+use std::f32::consts::{PI, TAU};
 
 use crate::config::MotorConfig;
 use crate::electrical::ElectricalState;
 use crate::i18n::{self, Language};
 use crate::phase;
-use crate::winding::{Direction, SlotPacking, axis, compute_conductors, compute_winding};
+use crate::winding::{
+    Conductor, Direction, SlotPacking, axis, compute_conductors, compute_winding,
+};
 
 pub struct WindingSchemePlugin;
 
@@ -63,7 +67,101 @@ fn winding_scheme_window(
                 egui::Sense::hover(),
             );
             draw_mmf_panel(ui, rect_bot, &config, &conductors, state.angle, &lang);
+
+            spectrum_section(ui, &config, &conductors, &lang);
         });
+}
+
+/// The harmonic spectrum section of the window.
+#[cfg(feature = "harmonics")]
+fn spectrum_section(
+    ui: &mut egui::Ui,
+    config: &MotorConfig,
+    conductors: &[Conductor],
+    lang: &Language,
+) {
+    ui.add_space(4.0);
+    ui.separator();
+    ui.add_space(4.0);
+    ui.label(egui::RichText::new(i18n::t(lang, "harmonic_spectrum")).strong());
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), 150.0),
+        egui::Sense::hover(),
+    );
+    draw_spectrum_panel(ui, rect, config, conductors);
+}
+
+#[cfg(not(feature = "harmonics"))]
+fn spectrum_section(_: &mut egui::Ui, _: &MotorConfig, _: &[Conductor], _: &Language) {}
+
+/// Highest electrical harmonic the spectrum shows.
+#[cfg(feature = "harmonics")]
+const MAX_HARMONIC: usize = 15;
+
+/// Amplitude of each odd electrical harmonic of the winding function.
+///
+/// The winding function of phase 0 is sampled around the bore and transformed
+/// directly, so the result reflects the conductors as they are actually laid
+/// out — including the two electrical layers landing on different phases when
+/// the coils are chorded. No closed form is assumed, which also means this
+/// stays right for windings the textbook `k_d`/`k_p` formulas do not cover.
+///
+/// A `p`-pole-pair machine turns electrical harmonic `ν` into spatial order
+/// `p·ν`, so that is the order each one is read at.
+#[cfg(feature = "harmonics")]
+fn winding_function_spectrum(config: &MotorConfig, conductors: &[Conductor]) -> Vec<(usize, f32)> {
+    let n = config.groove_count;
+    let p = config.pole_pairs.max(1);
+    if n == 0 {
+        return Vec::new();
+    }
+
+    // Piecewise-constant winding function of phase 0, as a running sum of the
+    // unit steps each conductor contributes at its slot.
+    let mut steps = vec![0.0_f32; n];
+    for conductor in conductors.iter().filter(|c| c.phase == 0) {
+        steps[conductor.slot] += match conductor.direction {
+            Direction::Out => 1.0,
+            Direction::In => -1.0,
+        };
+    }
+
+    let mut function = Vec::with_capacity(n);
+    let mut running = 0.0_f32;
+    for step in &steps {
+        running += step;
+        function.push(running);
+    }
+
+    // Each step is integrated in closed form rather than the function being
+    // sampled and transformed discretely. Sampling once per slot would cap the
+    // readable orders at `n/2` — with 24 slots and two pole pairs that stops at
+    // the fifth, and the seventh would fold back onto it. A staircase has exact
+    // coefficients at every order, so there is no reason to accept that.
+    //
+    // Over one step `∫e^{-iνθ}dθ = (e^{-iνθ₁} − e^{-iνθ₀}) / (−iν)`, and the
+    // constant term telescopes away on its own — no DC removal needed.
+    let step_angle = TAU / n as f32;
+    let amplitude_at = |order: usize| -> f32 {
+        if order == 0 {
+            return 0.0;
+        }
+        let (mut re, mut im) = (0.0_f32, 0.0_f32);
+        for (slot, &value) in function.iter().enumerate() {
+            let a0 = order as f32 * slot as f32 * step_angle;
+            let a1 = a0 + order as f32 * step_angle;
+            re += value * (a1.cos() - a0.cos());
+            im += value * (a0.sin() - a1.sin());
+        }
+        (re * re + im * im).sqrt() / (PI * order as f32)
+    };
+
+    // Even harmonics vanish in any symmetric winding, so only odd ones are
+    // worth the width on screen.
+    (1..=MAX_HARMONIC)
+        .step_by(2)
+        .map(|harmonic| (harmonic, amplitude_at(harmonic * p)))
+        .collect()
 }
 
 fn draw_conductor_panel(
@@ -421,4 +519,274 @@ fn draw_polyline(
     }
     let points: Vec<egui::Pos2> = (0..samples).map(f).collect();
     painter.add(egui::Shape::line(points, egui::Stroke::new(width, color)));
+}
+
+// ─── Harmonic spectrum panel ──────────────────────────────────────────────────
+
+#[cfg(feature = "harmonics")]
+fn draw_spectrum_panel(
+    ui: &egui::Ui,
+    rect: egui::Rect,
+    config: &MotorConfig,
+    conductors: &[Conductor],
+) {
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 20, 28));
+
+    let spectrum = winding_function_spectrum(config, conductors);
+    // An invalid configuration produces no conductors at all, so there is no
+    // fundamental to measure the rest against — leave the panel blank rather
+    // than dividing by it.
+    let Some(&(_, fundamental)) = spectrum.first() else {
+        return;
+    };
+    if !fundamental.is_finite() || fundamental <= f32::EPSILON {
+        return;
+    }
+
+    let pad_l = 34.0;
+    let pad_r = 12.0;
+    let pad_t = 10.0;
+    let pad_b = 22.0;
+    let plot = egui::Rect::from_min_max(
+        egui::pos2(rect.left() + pad_l, rect.top() + pad_t),
+        egui::pos2(rect.right() - pad_r, rect.bottom() - pad_b),
+    );
+
+    painter.rect_stroke(
+        plot,
+        2.0,
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(60, 60, 80)),
+        egui::StrokeKind::Middle,
+    );
+
+    // Everything is read against the fundamental, which is the comparison that
+    // matters: chording is judged by how far it pushes the 5th and 7th down
+    // relative to the useful component, not by their absolute size.
+    let bars = spectrum.len().max(1);
+    let slot_w = plot.width() / bars as f32;
+    let bar_w = (slot_w * 0.55).min(26.0);
+
+    // Reference gridlines at 25%, 50%, 75%, 100%.
+    for frac in [0.25_f32, 0.5, 0.75, 1.0] {
+        let y = plot.bottom() - frac * plot.height();
+        painter.line_segment(
+            [egui::pos2(plot.left(), y), egui::pos2(plot.right(), y)],
+            egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 40, 55)),
+        );
+        painter.text(
+            egui::pos2(rect.left() + pad_l - 5.0, y),
+            egui::Align2::RIGHT_CENTER,
+            format!("{:.0}%", frac * 100.0),
+            egui::FontId::proportional(9.0),
+            egui::Color32::from_rgb(110, 110, 130),
+        );
+    }
+
+    for (index, &(harmonic, amplitude)) in spectrum.iter().enumerate() {
+        let ratio = (amplitude / fundamental).clamp(0.0, 1.0);
+        let cx = plot.left() + (index as f32 + 0.5) * slot_w;
+        let top = plot.bottom() - ratio * plot.height();
+
+        // The fundamental is the reference; the 5th and 7th are the pair that
+        // chording exists to suppress, so they are called out.
+        let color = match harmonic {
+            1 => egui::Color32::from_rgb(90, 190, 120),
+            5 | 7 => egui::Color32::from_rgb(230, 140, 90),
+            _ => egui::Color32::from_rgb(110, 120, 160),
+        };
+
+        let bar = egui::Rect::from_min_max(
+            egui::pos2(cx - bar_w * 0.5, top),
+            egui::pos2(cx + bar_w * 0.5, plot.bottom()),
+        );
+        painter.rect_filled(bar, 1.0, color);
+
+        painter.text(
+            egui::pos2(cx, plot.bottom() + 10.0),
+            egui::Align2::CENTER_CENTER,
+            harmonic.to_string(),
+            egui::FontId::proportional(9.0),
+            egui::Color32::from_rgb(140, 140, 160),
+        );
+
+        // The harmonics sit far below the fundamental once the `1/ν` of the
+        // integration is in, so the number carries the reading where the bar
+        // is too short to.
+        if ratio > 0.004 {
+            painter.text(
+                egui::pos2(cx, top - 6.0),
+                egui::Align2::CENTER_BOTTOM,
+                format!("{:.0}", ratio * 100.0),
+                egui::FontId::proportional(9.0),
+                color,
+            );
+        }
+    }
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(all(test, feature = "harmonics"))]
+mod tests {
+    use super::*;
+
+    fn config(groove_count: usize, phases: usize, pole_pairs: usize, layers: usize) -> MotorConfig {
+        MotorConfig {
+            groove_count,
+            phases,
+            pole_pairs,
+            layers,
+            ..default()
+        }
+    }
+
+    fn spectrum(config: &MotorConfig) -> Vec<(usize, f32)> {
+        let assignments = compute_winding(config);
+        let conductors = compute_conductors(config, &assignments);
+        winding_function_spectrum(config, &conductors)
+    }
+
+    /// Amplitude of `harmonic` relative to the fundamental.
+    fn relative(spectrum: &[(usize, f32)], harmonic: usize) -> f32 {
+        let fundamental = spectrum[0].1;
+        let (_, amplitude) = spectrum
+            .iter()
+            .find(|(h, _)| *h == harmonic)
+            .unwrap_or_else(|| panic!("harmonic {harmonic} is missing from the spectrum"));
+        amplitude / fundamental
+    }
+
+    /// The transform of the real conductor layout must agree with the closed
+    /// form it is meant to make visible. If these two ever disagree, one of
+    /// them is wrong — and the numeric one is the honest witness, since it
+    /// makes no assumption about the winding being regular.
+    #[test]
+    fn the_spectrum_agrees_with_the_closed_form_winding_factors() {
+        for short_pitched in [false, true] {
+            let mut cfg = config(24, 3, 2, 2);
+            cfg.short_pitched = short_pitched;
+            let spec = spectrum(&cfg);
+
+            for harmonic in [5_usize, 7, 11] {
+                let numeric = relative(&spec, harmonic);
+                let closed = (axis::winding_factor(&cfg, harmonic) / axis::winding_factor(&cfg, 1))
+                    .abs()
+                    / harmonic as f32;
+
+                assert!(
+                    (numeric - closed).abs() < 0.02,
+                    "short_pitched={short_pitched} ν={harmonic}: \
+                     DFT says {numeric:.4}, closed form says {closed:.4}"
+                );
+            }
+        }
+    }
+
+    /// The payoff chording is for: the fifth and seventh collapse, and the
+    /// fundamental barely moves.
+    #[test]
+    fn chording_suppresses_the_fifth_and_seventh() {
+        let mut full = config(24, 3, 2, 2);
+        full.short_pitched = false;
+        let mut chorded = full.clone();
+        chorded.short_pitched = true;
+
+        let spec_full = spectrum(&full);
+        let spec_chorded = spectrum(&chorded);
+
+        for harmonic in [5_usize, 7] {
+            let before = relative(&spec_full, harmonic);
+            let after = relative(&spec_chorded, harmonic);
+            assert!(
+                after < before * 0.5,
+                "ν={harmonic}: chording only took {before:.3} to {after:.3}"
+            );
+        }
+
+        // Meanwhile the fundamental keeps almost all of its amplitude.
+        let kept = spec_chorded[0].1 / spec_full[0].1;
+        assert!(
+            (0.9..1.0).contains(&kept),
+            "the fundamental lost too much: kept {kept:.3}"
+        );
+    }
+
+    /// Integrating the steps in closed form has no Nyquist ceiling, so every
+    /// requested harmonic must come back — including the ones a once-per-slot
+    /// transform would have folded onto a lower order. With `S=24, p=2` the
+    /// seventh needs spatial order 14 against only 24 slots, which is exactly
+    /// the case that used to alias.
+    #[test]
+    fn every_odd_harmonic_is_reported_however_few_slots() {
+        for grooves in [12_usize, 24, 48] {
+            for pole_pairs in 1..=6_usize {
+                let cfg = config(grooves, 3, pole_pairs, 2);
+                let spec = spectrum(&cfg);
+                let harmonics: Vec<_> = spec.iter().map(|(h, _)| *h).collect();
+                assert_eq!(
+                    harmonics,
+                    (1..=MAX_HARMONIC).step_by(2).collect::<Vec<_>>(),
+                    "S={grooves} p={pole_pairs}"
+                );
+                for (harmonic, amplitude) in spec {
+                    assert!(
+                        amplitude.is_finite() && amplitude >= 0.0,
+                        "S={grooves} p={pole_pairs} ν={harmonic}: {amplitude}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Triplen harmonics are what the phase belts are arranged to cancel, so a
+    /// three-phase winding must show the third well below the fundamental.
+    #[test]
+    fn the_third_stays_below_the_fundamental() {
+        // 72 slots keep `S` divisible by `2·p·m` for every pole count here, so
+        // the winding is actually valid rather than silently empty.
+        for pole_pairs in [1_usize, 2, 3, 4, 6] {
+            let cfg = config(72, 3, pole_pairs, 2);
+            let third = relative(&spectrum(&cfg), 3);
+            assert!(
+                third < 0.4,
+                "p={pole_pairs}: third is {third:.3} of the fundamental"
+            );
+        }
+    }
+
+    /// An invalid configuration has no conductors, so the spectrum must come
+    /// back flat instead of dividing by an absent fundamental.
+    #[test]
+    fn an_invalid_configuration_yields_a_flat_spectrum() {
+        // 24 slots cannot host three pole pairs of a three-phase winding:
+        // `2·p·m = 18` does not divide 24.
+        let cfg = config(24, 3, 3, 2);
+        assert!(
+            !cfg.groove_count
+                .is_multiple_of(2 * cfg.pole_pairs * cfg.phases)
+        );
+
+        for (harmonic, amplitude) in spectrum(&cfg) {
+            assert_eq!(amplitude, 0.0, "ν={harmonic} should be silent");
+        }
+    }
+
+    /// A symmetric winding has no even harmonics and no DC, so the fundamental
+    /// must be the largest thing in the spectrum.
+    #[test]
+    fn the_fundamental_dominates() {
+        for pole_pairs in [1_usize, 2, 3, 4, 6] {
+            let cfg = config(72, 3, pole_pairs, 2);
+            let spec = spectrum(&cfg);
+            let fundamental = spec[0].1;
+            assert!(fundamental > 0.0, "p={pole_pairs}: no fundamental");
+            for &(harmonic, amplitude) in &spec[1..] {
+                assert!(
+                    amplitude <= fundamental,
+                    "p={pole_pairs}: ν={harmonic} ({amplitude}) beats the fundamental"
+                );
+            }
+        }
+    }
 }

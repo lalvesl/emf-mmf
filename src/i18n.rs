@@ -45,6 +45,56 @@ pub fn t(lang: &Language, key: &str) -> &'static str {
         (Language::PtBr, "layers") => "Camadas",
         (Language::En, "layers") => "Layers",
 
+        #[cfg(feature = "harmonics")]
+        (Language::PtBr, "distribution_factor") => "Fator de distribuição",
+        #[cfg(feature = "harmonics")]
+        (Language::En, "distribution_factor") => "Distribution factor",
+        #[cfg(feature = "harmonics")]
+        (Language::PtBr, "distribution_factor_hover") => {
+            "Espalhar a fase por q ranhuras soma as FEMs como um leque de \
+             fasores, não em linha reta. k_d = sen(qγ/2) / (q·sen(γ/2))."
+        }
+        #[cfg(feature = "harmonics")]
+        (Language::En, "distribution_factor_hover") => {
+            "Spreading a phase over q slots adds the coil EMFs as a fan of \
+             phasors rather than head to tail. k_d = sin(qγ/2) / (q·sin(γ/2))."
+        }
+
+        #[cfg(feature = "harmonics")]
+        (Language::PtBr, "pitch_factor") => "Fator de passo",
+        #[cfg(feature = "harmonics")]
+        (Language::En, "pitch_factor") => "Pitch factor",
+        #[cfg(feature = "harmonics")]
+        (Language::PtBr, "pitch_factor_hover") => {
+            "Vale 1 com passo pleno. Só o encurtamento o reduz — e é essa \
+             redução que corta o 5º e o 7º harmônicos. k_p = sen(ν·(y/τ)·90°)."
+        }
+        #[cfg(feature = "harmonics")]
+        (Language::En, "pitch_factor_hover") => {
+            "Exactly 1 at full pitch. Only chording lowers it — and that is what \
+             cuts the 5th and 7th harmonics. k_p = sin(ν·(y/τ)·90°)."
+        }
+
+        #[cfg(feature = "harmonics")]
+        (Language::PtBr, "winding_factor") => "Fator de enrolamento",
+        #[cfg(feature = "harmonics")]
+        (Language::En, "winding_factor") => "Winding factor",
+        #[cfg(feature = "harmonics")]
+        (Language::PtBr, "winding_factor_hover") => {
+            "Fração da FMM ideal (concentrada e de passo pleno) que este \
+             enrolamento realmente produz na fundamental."
+        }
+        #[cfg(feature = "harmonics")]
+        (Language::En, "winding_factor_hover") => {
+            "The fraction of the ideal (concentrated, full-pitch) MMF this \
+             winding actually produces at the fundamental."
+        }
+
+        #[cfg(feature = "harmonics")]
+        (Language::PtBr, "harmonic_spectrum") => "Espectro harmônico (% da fundamental)",
+        #[cfg(feature = "harmonics")]
+        (Language::En, "harmonic_spectrum") => "Harmonic spectrum (% of fundamental)",
+
         (Language::PtBr, "short_pitched") => "Encurtamento de passo",
         (Language::En, "short_pitched") => "Short-pitched coils",
 

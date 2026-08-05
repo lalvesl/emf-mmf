@@ -98,6 +98,75 @@ pub fn magnetic_axis(config: &MotorConfig, phase: usize, pole: usize) -> f32 {
     (start_elec + axis_offset_elec(config)) / p + slot_center(0, config.groove_count)
 }
 
+// ─── Winding factors (feature `harmonics`) ────────────────────────────────────
+
+/// Coil span as a fraction of the pole pitch (`y / τ`).
+///
+/// `1.0` is full pitch; chording makes it smaller.
+#[cfg(feature = "harmonics")]
+#[inline]
+pub fn pitch_ratio(config: &MotorConfig) -> f32 {
+    let pole_pitch = config.groove_count / (2 * config.pole_pairs.max(1));
+    if pole_pitch == 0 {
+        return 1.0;
+    }
+    super::coil_pitch(config) as f32 / pole_pitch as f32
+}
+
+/// Distribution factor `k_d` for the given electrical harmonic.
+///
+/// Spreading a phase over `q` slots means its coil EMFs no longer add head to
+/// tail but as a fan of phasors `γ` apart, so their resultant falls short of
+/// the arithmetic sum by `sin(νqγ/2) / (q·sin(νγ/2))`.
+///
+/// When `νγ/2` reaches a multiple of `π` every phasor in the fan points the
+/// same way again and the ratio tends to `±1` — the slot harmonics, which
+/// distribution cannot attenuate at all. The closed form is `0/0` there, so
+/// that limit is returned explicitly rather than as a `NaN`.
+#[cfg(feature = "harmonics")]
+pub fn distribution_factor(config: &MotorConfig, harmonic: usize) -> f32 {
+    let q = slots_per_pole_per_phase(config);
+    if q <= 1.0 {
+        // A concentrated winding has nothing to distribute.
+        return 1.0;
+    }
+
+    let half = harmonic as f32 * slot_angle_elec(config) * 0.5;
+    let denominator = half.sin();
+    if denominator.abs() < 1e-6 {
+        // Slot harmonic: the fan collapses onto one direction.
+        return if (harmonic as f32 * q * half).cos() < 0.0 {
+            -1.0
+        } else {
+            1.0
+        };
+    }
+
+    (q * half).sin() / (q * denominator)
+}
+
+/// Pitch (chording) factor `k_p` for the given electrical harmonic.
+///
+/// The two sides of a coil sit `y` slots apart instead of a full pole pitch, so
+/// their EMFs no longer oppose exactly and the coil resultant is
+/// `sin(ν·(y/τ)·π/2)`. At full pitch this is `±1` for every odd harmonic —
+/// which is the whole point: only chording can attenuate them selectively.
+#[cfg(feature = "harmonics")]
+#[inline]
+pub fn pitch_factor(config: &MotorConfig, harmonic: usize) -> f32 {
+    (harmonic as f32 * pitch_ratio(config) * PI * 0.5).sin()
+}
+
+/// Winding factor `k_w = k_d · k_p` for the given electrical harmonic.
+///
+/// The fraction of the ideal (concentrated, full-pitch) MMF that this winding
+/// actually produces at that harmonic.
+#[cfg(feature = "harmonics")]
+#[inline]
+pub fn winding_factor(config: &MotorConfig, harmonic: usize) -> f32 {
+    distribution_factor(config, harmonic) * pitch_factor(config, harmonic)
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -181,6 +250,112 @@ mod tests {
         assert!((phase_displacement(5) - TAU / 5.0).abs() < EPS);
         assert!((phase_displacement(2) - PI / 2.0).abs() < EPS);
         assert!((phase_displacement(6) - PI / 6.0).abs() < EPS);
+    }
+
+    /// Hand-checked against the classic worked example: `S=24, p=2, m=3` gives
+    /// `q=2` and `γ=30°`, so `k_d1 = sin(30°)/(2·sin(15°)) = 0.9659` and the
+    /// fifth and seventh fall to `0.2588`.
+    #[cfg(feature = "harmonics")]
+    #[test]
+    fn distribution_factors_match_the_textbook() {
+        let cfg = config(24, 3, 2);
+        assert!((slots_per_pole_per_phase(&cfg) - 2.0).abs() < EPS);
+        assert!((slot_angle_elec(&cfg).to_degrees() - 30.0).abs() < 1e-3);
+
+        for (harmonic, expected) in [(1_usize, 0.9659_f32), (5, 0.2588), (7, -0.2588)] {
+            let actual = distribution_factor(&cfg, harmonic);
+            assert!(
+                (actual - expected).abs() < 1e-3,
+                "k_d{harmonic} = {actual}, expected {expected}"
+            );
+        }
+    }
+
+    /// Full pitch cannot attenuate anything — that is exactly why chording is
+    /// the only tool available against the low odd harmonics.
+    #[cfg(feature = "harmonics")]
+    #[test]
+    fn full_pitch_leaves_every_harmonic_untouched() {
+        let cfg = config(24, 3, 2);
+        assert!(!cfg.short_pitched);
+        assert!((pitch_ratio(&cfg) - 1.0).abs() < EPS);
+
+        for harmonic in [1_usize, 3, 5, 7, 11, 13] {
+            assert!(
+                (pitch_factor(&cfg, harmonic).abs() - 1.0).abs() < 1e-4,
+                "k_p{harmonic} should be ±1 at full pitch"
+            );
+        }
+    }
+
+    /// A 5/6 chorded winding buys a 20-to-1 cut of the fifth and seventh for
+    /// 3.4% of the fundamental. That trade is the reason chording exists.
+    #[cfg(feature = "harmonics")]
+    #[test]
+    fn chording_trades_a_little_fundamental_for_a_lot_of_harmonic() {
+        let mut cfg = config(24, 3, 2);
+        cfg.short_pitched = true;
+        assert!((pitch_ratio(&cfg) - 5.0 / 6.0).abs() < EPS);
+
+        let mut full = cfg.clone();
+        full.short_pitched = false;
+
+        // The fundamental gives up only a few percent.
+        let lost = winding_factor(&cfg, 1).abs() / winding_factor(&full, 1).abs();
+        assert!((0.96..0.97).contains(&lost), "fundamental kept {lost}");
+
+        // The fifth and seventh are cut to roughly a quarter of what they were.
+        for harmonic in [5_usize, 7] {
+            let ratio =
+                winding_factor(&cfg, harmonic).abs() / winding_factor(&full, harmonic).abs();
+            assert!(
+                (0.25..0.27).contains(&ratio),
+                "harmonic {harmonic} kept {ratio}, expected roughly a quarter"
+            );
+        }
+    }
+
+    /// Slot harmonics make `sin(νγ/2)` vanish. The closed form is `0/0` there;
+    /// the limit is `±1`, and it must not surface as a `NaN`.
+    #[cfg(feature = "harmonics")]
+    #[test]
+    fn slot_harmonics_do_not_produce_nan() {
+        let cfg = config(24, 3, 2);
+        // γ = 30°, so ν = 12, 24, … drive the denominator to zero.
+        for harmonic in [12_usize, 24, 36] {
+            let k_d = distribution_factor(&cfg, harmonic);
+            assert!(k_d.is_finite(), "k_d{harmonic} is not finite");
+            assert!(
+                (k_d.abs() - 1.0).abs() < 1e-3,
+                "k_d{harmonic} = {k_d}, slot harmonics are not attenuated"
+            );
+        }
+
+        // And nothing anywhere in a wide sweep should be non-finite.
+        for grooves in [12_usize, 24, 36, 48] {
+            for pole_pairs in 1..=6_usize {
+                for phases in [2_usize, 3, 5] {
+                    let cfg = config(grooves, phases, pole_pairs);
+                    for harmonic in 1..=40_usize {
+                        assert!(
+                            winding_factor(&cfg, harmonic).is_finite(),
+                            "S={grooves} p={pole_pairs} m={phases} ν={harmonic}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// A concentrated winding distributes nothing.
+    #[cfg(feature = "harmonics")]
+    #[test]
+    fn one_slot_per_pole_per_phase_has_unit_distribution() {
+        let cfg = config(12, 3, 2);
+        assert!((slots_per_pole_per_phase(&cfg) - 1.0).abs() < EPS);
+        for harmonic in [1_usize, 5, 7] {
+            assert!((distribution_factor(&cfg, harmonic) - 1.0).abs() < EPS);
+        }
     }
 
     /// A balanced polyphase set sums to zero at every instant.
