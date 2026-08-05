@@ -213,9 +213,13 @@ fn ui_panel(
 
                 // Layers — conductors per slot, packed two per row
                 let mut layers = config.layers as i32;
-                let rows = config.layers.max(1).div_ceil(2);
-                let cols = config.layers.clamp(1, 2);
-                ui.label(format!("{} ({cols}×{rows})", t(&lang, "layers")));
+                let packing = crate::winding::SlotPacking::new(config.layers);
+                ui.label(format!(
+                    "{} ({}×{})",
+                    t(&lang, "layers"),
+                    packing.cols,
+                    packing.rows
+                ));
                 let response = ui.add(egui::Slider::new(
                     &mut layers,
                     (MotorConfig::MIN.layers as i32)..=(MotorConfig::MAX.layers as i32),
@@ -267,15 +271,11 @@ fn ui_panel(
                     let spp_str = format!("{}: {}", t(&lang, "slots_per_pole"), slots_per_pole);
                     let poles_str = format!("{}: {}", t(&lang, "total_poles"), 2 * p);
 
-                    let alpha = (p as f32 * 360.0) / (n as f32);
+                    let alpha = crate::winding::axis::slot_angle_elec(&config).to_degrees();
                     let alpha_str =
                         format!("{} (α=P/2.360/S): {:.2}°", t(&lang, "slot_angle"), alpha);
 
-                    let alpha_m = if !m.is_multiple_of(2) {
-                        360.0 / m as f32
-                    } else {
-                        180.0 / m as f32
-                    };
+                    let alpha_m = crate::winding::axis::phase_displacement(m).to_degrees();
                     let alpha_m_label = if !m.is_multiple_of(2) {
                         "(α.m=360/m)"
                     } else {
