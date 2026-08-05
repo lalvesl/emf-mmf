@@ -176,6 +176,13 @@ They call `cargo` directly and do not need the Dioxus CLI:
 - `src/stator.rs`: Procedural stator mesh generation (yoke + teeth).
 - `src/winding/`: Phase-belt distribution, slot conductors, endwinding arcs and
   current-direction symbols.
+  - `axis.rs`: the winding's angular reference frame — slot centres, phase
+    displacement, magnetic axes. Every view that has to point at a magnetic
+    axis (arrows, field overlay, rotor) derives it from here rather than
+    re-deriving it locally.
+  - `SlotPacking` / `SlotLayout`: how conductors are arranged in a slot, split
+    into the dimensionless arrangement and its metric placement so the 2D
+    diagram and the 3D view cannot disagree.
 - `src/electrical.rs`: Electrical angle animation and the current waveform strip.
 - `src/mmf_field/`: MMF field overlay meshes (per phase and resultant).
 - `src/vectors/`: 3D MMF arrows per phase and pole.
