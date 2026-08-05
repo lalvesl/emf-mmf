@@ -130,7 +130,7 @@ impl Default for MotorConfig {
             show_endwindings: true,
             show_vectors: true,
             show_rotor: true,
-            show_winding_scheme: true,
+            show_winding_scheme: false,
             mmf_field: MmfFieldConfig::default(),
         }
     }
