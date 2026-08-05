@@ -7,6 +7,7 @@ use std::f32::consts::{PI, TAU};
 
 use crate::config::{MotorConfig, MotorConfigChanged, STATOR_BORE_RADIUS, STATOR_HEIGHT};
 use crate::electrical::ElectricalState;
+use crate::winding::axis::{magnetic_axis, phase_current, phase_displacement};
 
 // ─── Plugin ──────────────────────────────────────────────────────────────────
 
@@ -69,40 +70,6 @@ fn angular_distance(a: f32, b: f32) -> f32 {
     d.min(TAU - d)
 }
 
-/// Mechanical angle of the magnetic axis of one phase×pole coil group.
-///
-/// `offset_elec` is the displacement of the group's axis from the start of its
-/// phase belt, and `offset_mech` aligns the result with the slot centres used
-/// by the winding geometry.
-#[inline]
-fn lobe_axis_angle(
-    pole: usize,
-    phase: usize,
-    alpha_m: f32,
-    offset_elec: f32,
-    offset_mech: f32,
-    pole_pairs: f32,
-) -> f32 {
-    let start_elec = phase as f32 * alpha_m + pole as f32 * PI;
-    ((start_elec + offset_elec) / pole_pairs) + offset_mech
-}
-
-/// Instantaneous per-unit current of `phase` at electrical angle `elec_angle`.
-#[inline]
-fn phase_current(elec_angle: f32, phase: usize, alpha_m: f32) -> f32 {
-    (elec_angle - phase as f32 * alpha_m).cos()
-}
-
-/// Electrical displacement between consecutive phases, in radians.
-#[inline]
-fn phase_displacement(phases: usize) -> f32 {
-    if !phases.is_multiple_of(2) {
-        TAU / phases as f32
-    } else {
-        PI / phases as f32
-    }
-}
-
 // ─── Regenerate (on config change) ───────────────────────────────────────────
 
 fn regenerate_field(
@@ -137,18 +104,6 @@ fn regenerate_field(
         return;
     }
 
-    let n = config.groove_count as f32;
-    let m_f32 = m as f32;
-    let p_f32 = p as f32;
-    let q = n / (2.0 * p_f32 * m_f32);
-    let pitch = crate::winding::coil_pitch(&config) as f32;
-
-    let alpha = (p_f32 * TAU) / n; // electrical angle per slot
-    let alpha_m = phase_displacement(m);
-
-    let offset_mech = (TAU / n) * 0.75; // matches winding.rs slot offset
-    let offset_elec = (q - 1.0 + pitch) / 2.0 * alpha;
-
     // One lobe per phase per pole, each covering exactly one pole pitch.
     let half_span = lobe_half_span(p);
 
@@ -167,8 +122,7 @@ fn regenerate_field(
                 continue;
             }
 
-            let axis_angle =
-                lobe_axis_angle(pole, phase, alpha_m, offset_elec, offset_mech, p_f32);
+            let axis_angle = magnetic_axis(&config, phase, pole);
 
             let color_srgba: bevy::color::Srgba = crate::phase::colors::phase_color(phase, m).into();
             let base_color = [color_srgba.red, color_srgba.green, color_srgba.blue, 1.0];
@@ -351,16 +305,6 @@ fn animate_result(
         // phase×pole so we can build a full-ring colour array.
         let sample_count = segments + 1;
 
-        // Every lobe's axis and signed amplitude is constant across the ring,
-        // so resolve them once instead of per angular sample.
-        let n = config.groove_count as f32;
-        let p_f32 = p as f32;
-        let q = n / (2.0 * p_f32 * m as f32);
-        let pitch = crate::winding::coil_pitch(&config) as f32;
-        let alpha_elec = (p_f32 * TAU) / n;
-        let offset_elec = (q - 1.0 + pitch) / 2.0 * alpha_elec;
-        let offset_mech = (TAU / n) * 0.75;
-
         // Must match the lobe width used for the individual phase sectors, so
         // the resultant really is the sum of what is drawn per phase.
         let lobe_half_span = lobe_half_span(p);
@@ -368,8 +312,7 @@ fn animate_result(
         let lobes: Vec<(f32, f32)> = (0..(2 * p))
             .flat_map(|pole| (0..m).map(move |phase| (pole, phase)))
             .map(|(pole, phase)| {
-                let axis_angle =
-                    lobe_axis_angle(pole, phase, alpha_m, offset_elec, offset_mech, p_f32);
+                let axis_angle = magnetic_axis(&config, phase, pole);
                 let sign = if pole % 2 == 0 { 1.0 } else { -1.0 };
                 let amplitude = phase_current(state.angle, phase, alpha_m) * sign;
                 (axis_angle, amplitude)
@@ -753,9 +696,15 @@ mod tests {
             );
 
             // Consecutive poles of the same phase sit exactly one lobe apart.
-            let alpha_m = phase_displacement(3);
-            let axis0 = lobe_axis_angle(0, 0, alpha_m, 0.2, 0.05, p);
-            let axis1 = lobe_axis_angle(1, 0, alpha_m, 0.2, 0.05, p);
+            let _ = p;
+            let cfg = MotorConfig {
+                groove_count: 12 * pole_pairs,
+                phases: 3,
+                pole_pairs,
+                ..bevy::prelude::default()
+            };
+            let axis0 = magnetic_axis(&cfg, 0, 0);
+            let axis1 = magnetic_axis(&cfg, 0, 1);
             assert!(
                 (angular_distance(axis0, axis1) - 2.0 * half).abs() < EPS,
                 "p={pole_pairs}: adjacent axes are not one lobe apart"
