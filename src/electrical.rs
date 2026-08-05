@@ -127,6 +127,7 @@ fn ui_electrical_waves(
                 let m = config.phases;
                 let width = rect.width();
                 let height = rect.height() / 2.0;
+                let alpha_m = crate::winding::axis::phase_displacement(m);
 
                 for phase in 0..m {
                     let color_bevy = crate::phase::colors::phase_color(phase, m);
@@ -138,13 +139,6 @@ fn ui_electrical_waves(
                         255,
                     );
 
-                    let phase_shift = if !m.is_multiple_of(2) {
-                        phase as f32 * 360.0 / (m as f32) // degrees
-                    } else {
-                        phase as f32 * 180.0 / (m as f32) // degrees
-                    }
-                    .to_radians();
-
                     let mut points = vec![];
                     let num_points = 100;
                     for i in 0..=num_points {
@@ -152,8 +146,8 @@ fn ui_electrical_waves(
                         let x = rect.left() + t_val * width;
                         let angle = t_val * std::f32::consts::TAU;
 
-                        // I_phase = cos(angle - phase_shift)
-                        let y_normalized = (angle - phase_shift).cos();
+                        let y_normalized =
+                            crate::winding::axis::phase_current(angle, phase, alpha_m);
                         let y = center_y - y_normalized * height * 0.9;
 
                         points.push(egui::pos2(x, y));
