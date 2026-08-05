@@ -44,7 +44,32 @@ value and reports the resulting `q = S / (m · P)`, slot angle and phase angle.
 
 Besides the winding parameters, the panel toggles the endwinding arcs, the MMF
 arrows, the MMF field overlay (per phase and resultant), the rotor, and the
-winding-scheme window.
+winding-scheme window. It also reports the winding factors for the fundamental:
+`k_d` (distribution), `k_p` (pitch) and their product `k_w`.
+
+### Winding factors and the harmonic spectrum
+
+> Built behind the **`harmonics`** feature, on by default. It is demonstration
+> material rather than everyday content, so `cargo build --no-default-features`
+> drops the factors, the spectrum panel and their tests entirely.
+
+`k_d = sin(qγ/2) / (q·sin(γ/2))` accounts for a phase being spread over `q`
+slots, and `k_p = sin(ν·(y/τ)·90°)` for its coils being chorded. At full pitch
+`|k_p| = 1` for every harmonic, which is precisely why chording is the only
+tool available against the low odd ones.
+
+The winding-scheme window plots the harmonic spectrum of the real winding
+function, as a percentage of the fundamental. Each step is integrated in closed
+form rather than the function being sampled and transformed: sampling once per
+slot would cap the readable orders at `S/2`, which with 24 slots and two pole
+pairs stops at the fifth and folds the seventh back onto it.
+
+Because it reads the conductors as actually laid out, it needs no closed-form
+assumption — it stays correct for windings the textbook formulas do not cover,
+and it reflects the two electrical layers landing on different phases when the
+coils are chorded. Ticking short pitch on a `S=24, p=2, m=3` machine takes the
+fifth from 5.4% to 1.4% and the seventh from 3.8% to 1.0%, for 3.4% of the
+fundamental.
 
 ### Slot filling and electrical layers
 
@@ -118,6 +143,15 @@ starts sweeping, so it does not cut through the teeth:
 
 With the endwindings hidden the conductors shrink back inside the core so the
 current-direction symbols on their end faces stay readable.
+
+## Cargo features
+
+| Feature | Default | What it adds |
+| :------------ | :-----: | :----------------------------------------------------------------- |
+| `harmonics`   | **on**  | Winding factors (`k_d`, `k_p`, `k_w`) and the harmonic spectrum panel |
+| `web`         | off     | WebAssembly target adjustments                                       |
+| `dev`         | off     | `bevy/dynamic_linking`, for faster incremental links                 |
+| `hotpatching` | off     | `bevy/hotpatching`, so `dx serve` can re-register systems live       |
 
 ## Tech Stack
 
