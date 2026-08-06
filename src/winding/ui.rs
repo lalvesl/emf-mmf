@@ -1,14 +1,14 @@
-use crate::config::MotorConfig;
+use crate::config::ViewConfig;
 use crate::i18n::Strings;
 use crate::ui::toggle_row;
 use bevy_egui::egui;
 use i18n::t;
 
-pub fn winding_ui(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
+pub fn winding_ui(ui: &mut egui::Ui, view: &mut ViewConfig) {
     toggle_row(
         ui,
-        &mut config.show_endwindings,
+        &mut view.show_endwindings,
         &t!(Strings::ShowHeaders),
         Some(&t!(Strings::ToggleHeadersHover)),
-    )
+    );
 }
