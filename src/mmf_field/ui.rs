@@ -1,9 +1,9 @@
 use crate::config::{MAX_PHASES, MmfFieldConfig, MotorConfig, ViewConfig};
 use crate::i18n::Strings;
 use crate::phase;
-use crate::ui::{float_slider, phase_swatch, slider_caption, toggle_row};
+use crate::ui::{float_slider, slider_caption, toggle_row};
 use bevy_egui::egui;
-use egui_sc::egui_components::{Checkbox, Size, Spacing, Tooltip, small_text};
+use egui_sc::egui_components::{Size, Spacing, Toggle, Tooltip};
 use i18n::t;
 
 pub fn mmf_ui(ui: &mut egui::Ui, config: &MotorConfig, view: &mut ViewConfig) {
@@ -28,37 +28,33 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &MotorConfig, view: &mut ViewConfig) {
         return;
     }
 
-    for i in 0..rows {
-        let color = phase::colors::phase_color_egui(i, config.phases);
-        let letter = phase::letter::phase_letter(i);
-        let name = format!("{} {} ({})", t!(Strings::Phase), i + 1, letter);
-
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            Checkbox::new(&mut view.mmf_field.phases_to_show[i])
-                .size(Size::Sm)
-                .show(ui);
-            phase_swatch(ui, color, &name);
-            Tooltip::new(&name).wrap(ui, |ui| {
-                ui.scope(|ui| small_text(ui, &letter.to_string())).response
-            });
-        });
-    }
-
     Spacing::Xs.show(ui);
 
-    // ── Result row ──────────────────────────────────────────────────────────
-    let result_label = t!(Strings::MmfResult);
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 4.0;
-        Checkbox::new(&mut view.mmf_field.show_result)
-            .size(Size::Sm)
-            .show(ui);
-        // White swatch to match the result mesh colour.
-        phase_swatch(ui, egui::Color32::WHITE, &result_label);
-        Tooltip::new(&result_label).wrap(ui, |ui| {
-            ui.scope(|ui| small_text(ui, &result_label)).response
-        });
+    // One chip per phase, wrapping onto as many lines as the panel needs.
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
+
+        for i in 0..rows {
+            let letter = phase::letter::phase_letter(i);
+            let name = format!("{} {} ({})", t!(Strings::Phase), i + 1, letter);
+            phase_toggle(
+                ui,
+                &mut view.mmf_field.phases_to_show[i],
+                phase::colors::phase_color_egui(i, config.phases),
+                &letter.to_string(),
+                &name,
+            );
+        }
+
+        // White to match the resultant mesh, which carries no phase colour.
+        let result = t!(Strings::MmfResult);
+        phase_toggle(
+            ui,
+            &mut view.mmf_field.show_result,
+            egui::Color32::WHITE,
+            &result,
+            &result,
+        );
     });
 
     Spacing::Xs.show(ui);
@@ -80,5 +76,39 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &MotorConfig, view: &mut ViewConfig) {
             MmfFieldConfig::MAX.gradient_intensity,
             0.1,
         )
+    });
+}
+
+/// A chip carrying one series' colour and name, pressed while it is drawn.
+fn phase_toggle(
+    ui: &mut egui::Ui,
+    shown: &mut bool,
+    color: egui::Color32,
+    label: &str,
+    hover: &str,
+) {
+    const DOT_RADIUS: f32 = 4.0;
+
+    let font = Size::Sm.font_size();
+    Tooltip::new(hover).wrap(ui, |ui| {
+        Toggle::custom(shown)
+            .size(Size::Sm)
+            .bordered(true)
+            .show_with(ui, |ui| {
+                // The surface itself cannot carry the phase colour — its fill
+                // is what reports pressed or not — so the colour rides along
+                // as a dot. `Sense::hover` keeps it from eating the click that
+                // would otherwise flip the toggle.
+                let (rect, _) = ui
+                    .allocate_exact_size(egui::Vec2::splat(DOT_RADIUS * 2.0), egui::Sense::hover());
+                ui.painter().circle_filled(rect.center(), DOT_RADIUS, color);
+
+                // A plain label, not `small_text`: the typography helpers pin
+                // an explicit colour, and an explicit colour beats the
+                // `override_text_color` that `show_with` sets from the toggle
+                // state — the label would keep the muted tone once pressed.
+                ui.label(egui::RichText::new(label).size(font));
+            })
+            .response
     });
 }
