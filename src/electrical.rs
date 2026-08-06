@@ -1,8 +1,13 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use egui_sc::egui_components::{
+    Button, ButtonSize, ButtonVariant, ICON_EXPAND_MORE, ICON_PAUSE, ICON_PLAY_ARROW, ICON_WAVES,
+    ShadcnTheme, Slider, Spacing, Tooltip, heading4, muted_text,
+};
+use i18n::t;
 
 use crate::config::MotorConfig;
-use crate::i18n::{Language, t};
+use crate::i18n::Strings;
 use crate::ui::{PanelLayout, PanelSpace};
 
 pub struct EletricalPlugin;
@@ -30,7 +35,9 @@ impl Plugin for EletricalPlugin {
             .add_systems(Update, update_electrical_angle)
             .add_systems(
                 EguiPrimaryContextPass,
-                ui_electrical_waves.in_set(PanelLayout::Bottom),
+                ui_electrical_waves
+                    .in_set(PanelLayout::Bottom)
+                    .run_if(crate::theme::fonts_ready),
             );
     }
 }
@@ -49,7 +56,6 @@ fn ui_electrical_waves(
     mut contexts: EguiContexts,
     mut state: ResMut<ElectricalState>,
     config: Res<MotorConfig>,
-    lang: Res<Language>,
     mut space: ResMut<PanelSpace>,
     mut minimized: Local<bool>,
 ) {
@@ -64,7 +70,12 @@ fn ui_electrical_waves(
         egui::Panel::bottom("electrical_minimized_panel")
             .resizable(false)
             .show(&mut viewport_ui, |ui| {
-                if ui.button(t(&lang, "electrical_currents")).clicked() {
+                if Button::new(&t!(Strings::ElectricalCurrents))
+                    .icon(ICON_WAVES)
+                    .variant(ButtonVariant::Ghost)
+                    .show(ui)
+                    .clicked()
+                {
                     *minimized = false;
                 }
             });
@@ -73,115 +84,117 @@ fn ui_electrical_waves(
             .resizable(true)
             .show(&mut viewport_ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.heading(t(&lang, "electrical_currents"));
+                    heading4(ui, &t!(Strings::ElectricalCurrents));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .button("⏷")
-                            .on_hover_text(t(&lang, "minimize_panel_hover"))
-                            .clicked()
-                        {
+                        let clicked = Tooltip::new(&t!(Strings::MinimizePanelHover))
+                            .wrap(ui, |ui| {
+                                Button::new("")
+                                    .icon(ICON_EXPAND_MORE)
+                                    .variant(ButtonVariant::Ghost)
+                                    .size(ButtonSize::Icon)
+                                    .show(ui)
+                            })
+                            .clicked();
+                        if clicked {
                             *minimized = true;
                         }
                     });
                 });
-                ui.add_space(4.0);
+                Spacing::Xs.show(ui);
 
-                ui.horizontal(|ui| {
-                    let play_text = if state.playing {
-                        t(&lang, "pause")
-                    } else {
-                        t(&lang, "play")
-                    };
-                    if ui.button(play_text).clicked() {
-                        state.playing = !state.playing;
-                    }
-                    ui.add(
-                        egui::Slider::new(&mut state.speed, 0.05..=5.0)
-                            .step_by(0.05)
-                            .text(t(&lang, "speed")),
-                    );
-                });
+                transport(ui, &mut state);
+                Spacing::Sm.show(ui);
 
-                ui.add_space(10.0);
-
-                // Draw the waves
-                // `Sense::drag()` alone never sets the click flag, so a plain
-                // click on the plot could not seek — only a drag could.
-                let (rect, response) = ui.allocate_exact_size(
-                    egui::vec2(ui.available_width(), 150.0),
-                    egui::Sense::click_and_drag(),
-                );
-
-                // Background
-                ui.painter()
-                    .rect_filled(rect, 4.0, egui::Color32::from_black_alpha(50));
-
-                // Axes
-                let center_y = rect.center().y;
-                ui.painter().hline(
-                    rect.x_range(),
-                    center_y,
-                    (1.0, egui::Color32::from_gray(100)),
-                );
-
-                let m = config.phases;
-                let width = rect.width();
-                let height = rect.height() / 2.0;
-                let alpha_m = crate::winding::axis::phase_displacement(m);
-
-                for phase in 0..m {
-                    let color_bevy = crate::phase::colors::phase_color(phase, m);
-                    let srgba: bevy::color::Srgba = color_bevy.into();
-                    let color_egui = egui::Color32::from_rgba_unmultiplied(
-                        (srgba.red * 255.0) as u8,
-                        (srgba.green * 255.0) as u8,
-                        (srgba.blue * 255.0) as u8,
-                        255,
-                    );
-
-                    let mut points = vec![];
-                    let num_points = 100;
-                    for i in 0..=num_points {
-                        let t_val = i as f32 / num_points as f32;
-                        let x = rect.left() + t_val * width;
-                        let angle = t_val * std::f32::consts::TAU;
-
-                        let y_normalized =
-                            crate::winding::axis::phase_current(angle, phase, alpha_m);
-                        let y = center_y - y_normalized * height * 0.9;
-
-                        points.push(egui::pos2(x, y));
-                    }
-
-                    ui.painter().add(egui::Shape::line(
-                        points,
-                        egui::Stroke::new(2.0, color_egui),
-                    ));
-                }
-
-                // Draggable bar logic
-                if response.dragged() || response.clicked() {
-                    state.playing = false;
-                    if let Some(pos) = response.interact_pointer_pos() {
-                        let rel_x = (pos.x - rect.left()) / width;
-                        state.angle = rel_x.clamp(0.0, 1.0) * std::f32::consts::TAU;
-                    }
-                }
-
-                // Draw current state bar
-                let normalized_angle = state.angle.rem_euclid(std::f32::consts::TAU);
-                let bar_x = rect.left() + (normalized_angle / std::f32::consts::TAU) * width;
-                ui.painter()
-                    .vline(bar_x, rect.y_range(), (2.0, egui::Color32::WHITE));
-
-                // Draw a small handle on top of the bar
-                ui.painter().circle_filled(
-                    egui::pos2(bar_x, rect.top()),
-                    4.0,
-                    egui::Color32::WHITE,
-                );
+                draw_waveforms(ui, &config, &mut state);
             });
     }
 
     space.claim(&viewport_ui);
+}
+
+/// Play/pause and the speed slider.
+fn transport(ui: &mut egui::Ui, state: &mut ElectricalState) {
+    let (label, glyph) = if state.playing {
+        (t!(Strings::Pause), ICON_PAUSE)
+    } else {
+        (t!(Strings::Play), ICON_PLAY_ARROW)
+    };
+
+    ui.horizontal(|ui| {
+        if Button::new(&label)
+            .icon(glyph)
+            .variant(ButtonVariant::Secondary)
+            .size(ButtonSize::Sm)
+            .show(ui)
+            .clicked()
+        {
+            state.playing = !state.playing;
+        }
+
+        muted_text(
+            ui,
+            &format!("{}: {:.2} Hz", t!(Strings::Speed), state.speed),
+        );
+        Slider::new(&mut state.speed, 0.05, 5.0).step(0.05).show(ui);
+    });
+}
+
+/// The per-phase current waveforms, with a scrubbable playhead.
+fn draw_waveforms(ui: &mut egui::Ui, config: &MotorConfig, state: &mut ElectricalState) {
+    let theme = ShadcnTheme::get(ui.ctx());
+
+    // `Sense::drag()` alone never sets the click flag, so a plain click on the
+    // plot could not seek — only a drag could.
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), 150.0),
+        egui::Sense::click_and_drag(),
+    );
+
+    let painter = ui.painter();
+    let corner = egui::CornerRadius::same(theme.radius as u8);
+    painter.rect_filled(rect, corner, theme.muted);
+
+    // Axes
+    let center_y = rect.center().y;
+    painter.hline(rect.x_range(), center_y, (1.0, theme.border));
+
+    let m = config.phases;
+    let width = rect.width();
+    let height = rect.height() / 2.0;
+    let alpha_m = crate::winding::axis::phase_displacement(m);
+
+    for phase in 0..m {
+        let color = crate::phase::colors::phase_color_egui(phase, m);
+
+        let num_points = 100;
+        let points: Vec<egui::Pos2> = (0..=num_points)
+            .map(|i| {
+                let t_val = i as f32 / num_points as f32;
+                let angle = t_val * std::f32::consts::TAU;
+                let y_normalized = crate::winding::axis::phase_current(angle, phase, alpha_m);
+                egui::pos2(
+                    rect.left() + t_val * width,
+                    center_y - y_normalized * height * 0.9,
+                )
+            })
+            .collect();
+
+        painter.add(egui::Shape::line(points, egui::Stroke::new(2.0, color)));
+    }
+
+    // Draggable bar logic
+    if response.dragged() || response.clicked() {
+        state.playing = false;
+        if let Some(pos) = response.interact_pointer_pos() {
+            let rel_x = (pos.x - rect.left()) / width;
+            state.angle = rel_x.clamp(0.0, 1.0) * std::f32::consts::TAU;
+        }
+    }
+
+    // Playhead
+    let normalized_angle = state.angle.rem_euclid(std::f32::consts::TAU);
+    let bar_x = rect.left() + (normalized_angle / std::f32::consts::TAU) * width;
+    let painter = ui.painter();
+    painter.vline(bar_x, rect.y_range(), (2.0, theme.foreground));
+    painter.circle_filled(egui::pos2(bar_x, rect.top()), 4.0, theme.foreground);
 }
