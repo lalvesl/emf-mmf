@@ -43,14 +43,14 @@ pub fn main() {
         .add_plugins(rotor::render::RotorPlugin)
         .add_plugins(winding_scheme::render::WindingSchemePlugin)
         .init_resource::<config::MotorConfig>()
-        .add_message::<config::MotorConfigChanged>()
+        .init_resource::<config::ViewConfig>()
         .add_systems(Startup, setup::setup)
         .add_systems(
             Update,
             (
                 camera::orbit_camera,
-                stator::regenerate_stator,
-                winding::regenerate_winding,
+                stator::regenerate_stator.run_if(resource_changed::<config::MotorConfig>),
+                winding::regenerate_winding.run_if(config::scene_changed),
             ),
         )
         .run();
