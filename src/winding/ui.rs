@@ -1,9 +1,14 @@
 use crate::config::MotorConfig;
-use crate::i18n::{Language, t};
+use crate::i18n::Strings;
+use crate::ui::toggle_row;
 use bevy_egui::egui;
+use i18n::t;
 
-pub fn winding_ui(ui: &mut egui::Ui, config: &mut MotorConfig, lang: &Language) -> bool {
-    ui.checkbox(&mut config.show_endwindings, t(lang, "show_headers"))
-        .on_hover_text(t(lang, "toggle_headers_hover"))
-        .changed()
+pub fn winding_ui(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
+    toggle_row(
+        ui,
+        &mut config.show_endwindings,
+        &t!(Strings::ShowHeaders),
+        Some(&t!(Strings::ToggleHeadersHover)),
+    )
 }
