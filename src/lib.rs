@@ -7,6 +7,7 @@ pub mod phase;
 pub mod rotor;
 pub mod setup;
 pub mod stator;
+pub mod theme;
 pub mod ui;
 pub mod vectors;
 pub mod winding;
