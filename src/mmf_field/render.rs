@@ -49,6 +49,107 @@ pub struct MmfResultSector {
 /// White RGBA used for the resultant MMF field.
 const RESULT_BASE_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
+/// Rim colour of a north pole.
+///
+/// Deep and hard-saturated rather than bright: the material blends normally
+/// over the scene, so a light red would wash out against the phase colours,
+/// which sit at middling lightness. Driving the off-channels to near zero also
+/// separates the rim from any reddish phase by luminance as well as hue.
+const NORTH_COLOR: [f32; 3] = [0.78, 0.02, 0.03];
+/// Rim colour of a south pole. Deep for the same reason as [`NORTH_COLOR`].
+const SOUTH_COLOR: [f32; 3] = [0.02, 0.09, 0.82];
+
+/// Radial rings across a sector's caps.
+///
+/// Two rings would leave the rasteriser to interpolate the rim colour linearly
+/// all the way in to the bore centre. The polarity band has to stay bunched
+/// against the outer edge, so the caps are subdivided and the falloff sampled
+/// per ring instead.
+const RADIAL_RINGS: usize = 6;
+
+/// How sharply the polarity colour gives way to the identity colour going
+/// inward. Higher keeps it harder against the rim.
+const POLARITY_FALLOFF: f32 = 5.0;
+
+/// Fraction of polarity colour at radial position `t` — 0 at the bore centre,
+/// 1 at the rim.
+#[inline]
+fn polarity_mix(t: f32) -> f32 {
+    t.clamp(0.0, 1.0).powf(POLARITY_FALLOFF)
+}
+
+/// Colour of one sector vertex: identity in the core, polarity on the rim.
+///
+/// `amplitude` carries the sign, so the rim goes red where the lobe is a north
+/// pole and blue where it is a south, while the core keeps the phase hue — or
+/// white, for the resultant. Alpha tracks magnitude alone, so a weak pole fades
+/// out rather than changing colour.
+///
+/// Separating the two onto different parts of the lobe is what lets both be
+/// read at once: hue is already fully spent identifying the phase.
+fn sector_color(base_color: [f32; 4], amplitude: f32, bell: f32, radial: f32) -> [f32; 4] {
+    let polarity = if amplitude >= 0.0 {
+        NORTH_COLOR
+    } else {
+        SOUTH_COLOR
+    };
+    let mix = polarity_mix(radial);
+    let blend = |core: f32, rim: f32| core + (rim - core) * mix;
+
+    [
+        blend(base_color[0], polarity[0]),
+        blend(base_color[1], polarity[1]),
+        blend(base_color[2], polarity[2]),
+        amplitude.abs() * bell,
+    ]
+}
+
+/// Walks the vertex layout of a sector mesh in order, handing each vertex's
+/// angle and radial position (0 at the bore centre, 1 at the rim) to `visit`.
+///
+/// The mesh is built once, recoloured when the configuration changes and
+/// recoloured again every frame — from three separate places, each of which
+/// used to spell the layout out for itself. Sharing this one walk is what stops
+/// them drifting apart.
+fn for_each_sector_vertex(
+    axis_angle: f32,
+    half_span: f32,
+    segments: u32,
+    mut visit: impl FnMut(f32, f32),
+) {
+    let angle_at = |i: u32| {
+        let t = i as f32 / segments as f32;
+        (axis_angle - half_span) + t * 2.0 * half_span
+    };
+
+    // Top cap then bottom cap, innermost ring first.
+    for _cap in 0..2 {
+        for ring in 0..RADIAL_RINGS {
+            let radial = ring as f32 / (RADIAL_RINGS - 1) as f32;
+            for i in 0..=segments {
+                visit(angle_at(i), radial);
+            }
+        }
+    }
+
+    // Outer wall then inner wall, each interleaving (bottom, top) pairs.
+    for radial in [1.0_f32, 0.0] {
+        for i in 0..=segments {
+            let a = angle_at(i);
+            visit(a, radial);
+            visit(a, radial);
+        }
+    }
+}
+
+/// Angular falloff of a lobe: 1 on its axis, 0 at the edge of its span.
+#[inline]
+fn lobe_bell(a: f32, axis_angle: f32, half_span: f32, gradient_intensity: f32) -> f32 {
+    let delta = angular_distance(a, axis_angle);
+    let t = (delta / half_span).clamp(0.0, 1.0);
+    (1.0 - t * t).max(0.0_f32).sqrt().powf(gradient_intensity)
+}
+
 /// Mechanical half-width of one phase×pole MMF lobe.
 ///
 /// Consecutive pole axes sit one pole pitch (`π / p` mechanical) apart, so a
@@ -250,10 +351,9 @@ fn animate_field(
         // Pole alternation: every other pole inverts the field direction
         let mmf_amplitude = current * if sector.pole % 2 == 0 { 1.0 } else { -1.0 };
 
-        // Absolute amplitude drives the visual intensity; keep positive.
-        let abs_amplitude = mmf_amplitude.abs();
-
-        // Rebuild vertex colours for this sector
+        // The sign is kept, not thrown away: magnitude drives the alpha and the
+        // sign picks the rim colour, so a north lobe and a south lobe of the
+        // same phase no longer render identically.
         if let Some(mut mesh) = meshes.get_mut(&mesh3d.0) {
             recolor_sector_mesh(
                 &mut mesh,
@@ -261,7 +361,7 @@ fn animate_field(
                 sector.half_angular_span,
                 sector.segments,
                 gradient_intensity,
-                abs_amplitude,
+                mmf_amplitude,
                 sector.base_color,
             );
         }
@@ -333,56 +433,31 @@ fn animate_result(
                 })
                 .sum();
             // Normalise so maximum amplitude is ~1 when all phases are at peak.
-            // Dividing by m spreads the scale evenly across all phases.
-            (total / m as f32).abs().clamp(0.0, 1.0)
+            // Dividing by m spreads the scale evenly across all phases. The
+            // sign survives: it is what tells a north lobe from a south.
+            (total / m as f32).clamp(-1.0, 1.0)
         };
 
         let Some(mut mesh) = meshes.get_mut(&mesh3d.0) else {
             continue;
         };
 
-        // Reconstruct the colour array matching the vertex layout of
-        // `build_sector_mesh` (axis=0, half_span=PI).
-        let mut colors_correct: Vec<[f32; 4]> = Vec::with_capacity((sample_count * 8) as usize);
-        let axis = 0.0_f32;
-
-        // Faces 0 & 1 — top cap inner, top cap outer, bottom cap inner, bottom cap outer
-        for _cap in 0..2 {
-            for ring in 0..2 {
-                let _ = ring; // both rings share the same angle samples
-                for i in 0..=segments {
-                    let t = i as f32 / segments as f32;
-                    let a = (axis - half_span) + t * 2.0 * half_span;
-                    let amp = mmf_at_angle(a);
-                    colors_correct.push([
-                        RESULT_BASE_COLOR[0],
-                        RESULT_BASE_COLOR[1],
-                        RESULT_BASE_COLOR[2],
-                        amp,
-                    ]);
-                }
-            }
-        }
-
-        // Faces 2 & 3 — outer wall and inner wall (interleaved bot/top pairs)
-        for _wall in 0..2 {
-            for i in 0..=segments {
-                let t = i as f32 / segments as f32;
-                let a = (axis - half_span) + t * 2.0 * half_span;
-                let amp = mmf_at_angle(a);
-                let c = [
-                    RESULT_BASE_COLOR[0],
-                    RESULT_BASE_COLOR[1],
-                    RESULT_BASE_COLOR[2],
-                    amp,
-                ];
-                colors_correct.push(c); // bot
-                colors_correct.push(c); // top
-            }
-        }
+        // The resultant ring is one sector spanning the whole bore, so the same
+        // walk that laid the mesh out drives its colours too.
+        let mut colors: Vec<[f32; 4]> = Vec::with_capacity((sample_count * 8) as usize);
+        for_each_sector_vertex(0.0, half_span, segments, |a, radial| {
+            // The bell is already folded into `mmf_at_angle`, which sums every
+            // lobe, so the angular falloff here is 1.
+            colors.push(sector_color(
+                RESULT_BASE_COLOR,
+                mmf_at_angle(a),
+                1.0,
+                radial,
+            ));
+        });
 
         if let Some(attr) = mesh.attribute_mut(Mesh::ATTRIBUTE_COLOR) {
-            *attr = bevy::mesh::VertexAttributeValues::Float32x4(colors_correct);
+            *attr = bevy::mesh::VertexAttributeValues::Float32x4(colors);
         }
     }
 }
@@ -428,10 +503,8 @@ fn build_sector_mesh(params: SectorMeshParams) -> Mesh {
     let base_color = params.base_color;
     let vertex_count_ring = (segments + 1) as usize;
     let total_verts =
-        // top cap:   (segs+1) inner + (segs+1) outer
-        vertex_count_ring * 2
-        // bottom cap: same
-        + vertex_count_ring * 2
+        // two caps of RADIAL_RINGS rings each
+        vertex_count_ring * RADIAL_RINGS * 2
         // outer wall: (segs+1) bot + (segs+1) top
         + vertex_count_ring * 2
         // inner wall: same
@@ -440,85 +513,42 @@ fn build_sector_mesh(params: SectorMeshParams) -> Mesh {
     let mut positions: Vec<[f32; 3]> = Vec::with_capacity(total_verts);
     let mut normals: Vec<[f32; 3]> = Vec::with_capacity(total_verts);
     let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(total_verts);
-    let mut colors: Vec<[f32; 4]> = Vec::with_capacity(total_verts);
     let mut indices: Vec<u32> = Vec::new();
 
-    // Helper: alpha at angle `a` from axis
-    // `a` is always generated as `axis_angle ± half_span`, so it can never be
-    // more than `half_span` away and no ±π wrapping is needed here (unlike in
-    // `animate_result`, which samples the ring independently of any axis).
-    let alpha_at = |a: f32| -> f32 {
-        let delta = (a - axis_angle).abs();
-        let t = (delta / half_span).clamp(0.0, 1.0);
-        let base = (1.0 - t * t).max(0.0_f32).sqrt(); // half-cosine bell
-        let shaped = base.powf(gradient_intensity);
-        amplitude * shaped
-    };
-
-    let color_at = |a: f32| -> [f32; 4] {
-        let alpha = alpha_at(a);
-        [base_color[0], base_color[1], base_color[2], alpha]
-    };
-
     let ring_point = |r: f32, a: f32, y: f32| -> [f32; 3] { [r * a.cos(), y, r * a.sin()] };
+    let radius_at = |radial: f32| r_inner + (r_outer - r_inner) * radial;
 
-    // ── Top cap (y = y_top, normal = +Y) ──────────────────────────────────
-    {
+    // ── Caps (top then bottom) ────────────────────────────────────────────
+    // Both are subdivided radially so the polarity rim has geometry to sit on.
+    for (y, normal_y) in [(y_top, 1.0_f32), (y_bot, -1.0)] {
         let base_idx = positions.len() as u32;
-        // inner ring vertices
-        for i in 0..=segments {
-            let t = i as f32 / segments as f32;
-            let a = (axis_angle - half_span) + t * 2.0 * half_span;
-            positions.push(ring_point(r_inner, a, y_top));
-            normals.push([0.0, 1.0, 0.0]);
-            uvs.push([t, 0.0]);
-            colors.push(color_at(a));
-        }
-        // outer ring vertices
-        for i in 0..=segments {
-            let t = i as f32 / segments as f32;
-            let a = (axis_angle - half_span) + t * 2.0 * half_span;
-            positions.push(ring_point(r_outer, a, y_top));
-            normals.push([0.0, 1.0, 0.0]);
-            uvs.push([t, 1.0]);
-            colors.push(color_at(a));
-        }
-        let inner_base = base_idx;
-        let outer_base = base_idx + (segments + 1);
-        for i in 0..segments {
-            let ii = inner_base + i;
-            let oi = outer_base + i;
-            // Two triangles: (ii, ii+1, oi+1) and (ii, oi+1, oi)
-            indices.extend_from_slice(&[ii, ii + 1, oi + 1, ii, oi + 1, oi]);
-        }
-    }
 
-    // ── Bottom cap (y = y_bot, normal = -Y) ───────────────────────────────
-    {
-        let base_idx = positions.len() as u32;
-        for i in 0..=segments {
-            let t = i as f32 / segments as f32;
-            let a = (axis_angle - half_span) + t * 2.0 * half_span;
-            positions.push(ring_point(r_inner, a, y_bot));
-            normals.push([0.0, -1.0, 0.0]);
-            uvs.push([t, 0.0]);
-            colors.push(color_at(a));
+        for ring in 0..RADIAL_RINGS {
+            let radial = ring as f32 / (RADIAL_RINGS - 1) as f32;
+            let r = radius_at(radial);
+            for i in 0..=segments {
+                let t = i as f32 / segments as f32;
+                let a = (axis_angle - half_span) + t * 2.0 * half_span;
+                positions.push(ring_point(r, a, y));
+                normals.push([0.0, normal_y, 0.0]);
+                uvs.push([t, radial]);
+            }
         }
-        for i in 0..=segments {
-            let t = i as f32 / segments as f32;
-            let a = (axis_angle - half_span) + t * 2.0 * half_span;
-            positions.push(ring_point(r_outer, a, y_bot));
-            normals.push([0.0, -1.0, 0.0]);
-            uvs.push([t, 1.0]);
-            colors.push(color_at(a));
-        }
-        let inner_base = base_idx;
-        let outer_base = base_idx + (segments + 1);
-        for i in 0..segments {
-            let ii = inner_base + i;
-            let oi = outer_base + i;
-            // Flipped winding for bottom face
-            indices.extend_from_slice(&[ii, oi + 1, ii + 1, ii, oi, oi + 1]);
+
+        let stride = segments + 1;
+        for ring in 0..(RADIAL_RINGS as u32 - 1) {
+            let inner_base = base_idx + ring * stride;
+            let outer_base = inner_base + stride;
+            for i in 0..segments {
+                let ii = inner_base + i;
+                let oi = outer_base + i;
+                if normal_y > 0.0 {
+                    indices.extend_from_slice(&[ii, ii + 1, oi + 1, ii, oi + 1, oi]);
+                } else {
+                    // Flipped winding for the downward-facing cap
+                    indices.extend_from_slice(&[ii, oi + 1, ii + 1, ii, oi, oi + 1]);
+                }
+            }
         }
     }
 
@@ -533,12 +563,10 @@ fn build_sector_mesh(params: SectorMeshParams) -> Mesh {
             positions.push([r_outer * c, y_bot, r_outer * s]);
             normals.push([c, 0.0, s]);
             uvs.push([t, 0.0]);
-            colors.push(color_at(a));
             // top vertex
             positions.push([r_outer * c, y_top, r_outer * s]);
             normals.push([c, 0.0, s]);
             uvs.push([t, 1.0]);
-            colors.push(color_at(a));
         }
         for i in 0..segments {
             let b = base_idx + i * 2;
@@ -556,11 +584,9 @@ fn build_sector_mesh(params: SectorMeshParams) -> Mesh {
             positions.push([r_inner * c, y_bot, r_inner * s]);
             normals.push([-c, 0.0, -s]);
             uvs.push([t, 0.0]);
-            colors.push(color_at(a));
             positions.push([r_inner * c, y_top, r_inner * s]);
             normals.push([-c, 0.0, -s]);
             uvs.push([t, 1.0]);
-            colors.push(color_at(a));
         }
         for i in 0..segments {
             let b = base_idx + i * 2;
@@ -568,6 +594,15 @@ fn build_sector_mesh(params: SectorMeshParams) -> Mesh {
             indices.extend_from_slice(&[b, b + 3, b + 1, b, b + 2, b + 3]);
         }
     }
+
+    // Colours come from the shared walk, so they land on the vertices above in
+    // the same order the two recolour paths will assume.
+    let mut colors: Vec<[f32; 4]> = Vec::with_capacity(total_verts);
+    for_each_sector_vertex(axis_angle, half_span, segments, |a, radial| {
+        let bell = lobe_bell(a, axis_angle, half_span, gradient_intensity);
+        colors.push(sector_color(base_color, amplitude, bell, radial));
+    });
+    debug_assert_eq!(colors.len(), positions.len());
 
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -592,68 +627,14 @@ fn recolor_sector_mesh(
     amplitude: f32,
     base_color: [f32; 4],
 ) {
-    // `a` is always generated as `axis_angle ± half_span`, so it can never be
-    // more than `half_span` away and no ±π wrapping is needed here (unlike in
-    // `animate_result`, which samples the ring independently of any axis).
-    let alpha_at = |a: f32| -> f32 {
-        let delta = (a - axis_angle).abs();
-        let t = (delta / half_span).clamp(0.0, 1.0);
-        let base = (1.0 - t * t).max(0.0_f32).sqrt();
-        amplitude * base.powf(gradient_intensity)
-    };
-
-    let color_at =
-        |a: f32| -> [f32; 4] { [base_color[0], base_color[1], base_color[2], alpha_at(a)] };
-
-    // Regenerate all 4 faces' colours in the exact vertex order used by
-    // `build_sector_mesh`. Note the caps store two separate rings while the
-    // walls interleave (bot, top) pairs, so the two layouts differ.
-    let n = segments + 1;
-    let total = (n * 8) as usize; // 4 faces × 2 rings each, each with n verts
-    let mut colors_correct: Vec<[f32; 4]> = Vec::with_capacity(total);
-
-    // Face 0 — top cap: inner (segs+1) then outer (segs+1)
-    for i in 0..=segments {
-        let t = i as f32 / segments as f32;
-        let a = (axis_angle - half_span) + t * 2.0 * half_span;
-        colors_correct.push(color_at(a));
-    }
-    for i in 0..=segments {
-        let t = i as f32 / segments as f32;
-        let a = (axis_angle - half_span) + t * 2.0 * half_span;
-        colors_correct.push(color_at(a));
-    }
-
-    // Face 1 — bottom cap: inner (segs+1) then outer (segs+1)
-    for i in 0..=segments {
-        let t = i as f32 / segments as f32;
-        let a = (axis_angle - half_span) + t * 2.0 * half_span;
-        colors_correct.push(color_at(a));
-    }
-    for i in 0..=segments {
-        let t = i as f32 / segments as f32;
-        let a = (axis_angle - half_span) + t * 2.0 * half_span;
-        colors_correct.push(color_at(a));
-    }
-
-    // Face 2 — outer wall: interleaved (bot, top) pairs for each angle step
-    for i in 0..=segments {
-        let t = i as f32 / segments as f32;
-        let a = (axis_angle - half_span) + t * 2.0 * half_span;
-        colors_correct.push(color_at(a)); // bot
-        colors_correct.push(color_at(a)); // top
-    }
-
-    // Face 3 — inner wall: interleaved (bot, top) pairs
-    for i in 0..=segments {
-        let t = i as f32 / segments as f32;
-        let a = (axis_angle - half_span) + t * 2.0 * half_span;
-        colors_correct.push(color_at(a)); // bot
-        colors_correct.push(color_at(a)); // top
-    }
+    let mut colors: Vec<[f32; 4]> = Vec::new();
+    for_each_sector_vertex(axis_angle, half_span, segments, |a, radial| {
+        let bell = lobe_bell(a, axis_angle, half_span, gradient_intensity);
+        colors.push(sector_color(base_color, amplitude, bell, radial));
+    });
 
     if let Some(attr) = mesh.attribute_mut(Mesh::ATTRIBUTE_COLOR) {
-        *attr = VertexAttributeValues::Float32x4(colors_correct);
+        *attr = VertexAttributeValues::Float32x4(colors);
     }
 }
 
@@ -664,6 +645,141 @@ mod tests {
     use super::*;
 
     const EPS: f32 = 1e-4;
+
+    fn sector_params(amplitude: f32, base_color: [f32; 4]) -> SectorMeshParams {
+        SectorMeshParams {
+            r_inner: 0.05,
+            r_outer: 1.94,
+            y_bot: -0.98,
+            y_top: 0.98,
+            axis_angle: 0.6,
+            half_span: 0.5,
+            segments: 8,
+            gradient_intensity: 2.0,
+            amplitude,
+            base_color,
+        }
+    }
+
+    fn mesh_colors(mesh: &Mesh) -> Vec<[f32; 4]> {
+        match mesh.attribute(Mesh::ATTRIBUTE_COLOR) {
+            Some(VertexAttributeValues::Float32x4(c)) => c.clone(),
+            _ => panic!("sector mesh has no colour attribute"),
+        }
+    }
+
+    fn mesh_positions(mesh: &Mesh) -> Vec<[f32; 3]> {
+        match mesh.attribute(Mesh::ATTRIBUTE_POSITION) {
+            Some(VertexAttributeValues::Float32x3(p)) => p.clone(),
+            _ => panic!("sector mesh has no positions"),
+        }
+    }
+
+    /// The mesh is laid out in one place and recoloured in two others, so the
+    /// colour of a vertex must follow from where that vertex actually is. This
+    /// recovers each vertex's radius from its position and checks the colour
+    /// against it — if any of the three walks drifts, this catches it.
+    #[test]
+    fn every_vertex_is_coloured_for_the_radius_it_sits_at() {
+        let params = sector_params(0.8, [0.2, 0.9, 0.3, 1.0]);
+        let (r_inner, r_outer) = (params.r_inner, params.r_outer);
+        let mesh = build_sector_mesh(params);
+
+        let positions = mesh_positions(&mesh);
+        let colors = mesh_colors(&mesh);
+        assert_eq!(positions.len(), colors.len());
+
+        for (position, color) in positions.iter().zip(colors.iter()) {
+            let radius = (position[0] * position[0] + position[2] * position[2]).sqrt();
+            let radial = ((radius - r_inner) / (r_outer - r_inner)).clamp(0.0, 1.0);
+            let expected_mix = polarity_mix(radial);
+
+            // Red channel: blends from the phase's 0.2 towards the north 1.0.
+            let expected_red = 0.2 + (NORTH_COLOR[0] - 0.2) * expected_mix;
+            assert!(
+                (color[0] - expected_red).abs() < 1e-3,
+                "vertex at r={radius:.3} (radial {radial:.3}) is {:.3} red, expected {expected_red:.3}",
+                color[0]
+            );
+        }
+    }
+
+    /// Rebuilding the colours must land on exactly the same array the builder
+    /// produced for the same parameters.
+    #[test]
+    fn recolouring_reproduces_the_built_colours() {
+        let params = sector_params(-0.6, [0.2, 0.9, 0.3, 1.0]);
+        let (axis_angle, half_span, segments, gradient, amplitude, base) = (
+            params.axis_angle,
+            params.half_span,
+            params.segments,
+            params.gradient_intensity,
+            params.amplitude,
+            params.base_color,
+        );
+        let mut mesh = build_sector_mesh(params);
+        let built = mesh_colors(&mesh);
+
+        recolor_sector_mesh(
+            &mut mesh, axis_angle, half_span, segments, gradient, amplitude, base,
+        );
+        assert_eq!(built, mesh_colors(&mesh));
+    }
+
+    /// North and south must be told apart at the rim, and must agree in the
+    /// core — that is the whole point of splitting the two encodings.
+    #[test]
+    fn polarity_shows_on_the_rim_and_not_in_the_core() {
+        let base = [0.2, 0.9, 0.3, 1.0];
+        let bell = 1.0;
+
+        let north_rim = sector_color(base, 0.7, bell, 1.0);
+        let south_rim = sector_color(base, -0.7, bell, 1.0);
+
+        // At the rim the blend is complete, whatever the two are tuned to.
+        for channel in 0..3 {
+            assert!((north_rim[channel] - NORTH_COLOR[channel]).abs() < EPS);
+            assert!((south_rim[channel] - SOUTH_COLOR[channel]).abs() < EPS);
+        }
+        // And they must be plainly opposite: red leads one, blue the other.
+        assert!(
+            north_rim[0] > north_rim[2],
+            "the north rim should read red: {north_rim:?}"
+        );
+        assert!(
+            south_rim[2] > south_rim[0],
+            "the south rim should read blue: {south_rim:?}"
+        );
+
+        // Same magnitude, so the same opacity either way.
+        assert!((north_rim[3] - south_rim[3]).abs() < EPS);
+
+        // At the centre both collapse onto the identity colour.
+        for amplitude in [0.7_f32, -0.7] {
+            let core = sector_color(base, amplitude, bell, 0.0);
+            for channel in 0..3 {
+                assert!((core[channel] - base[channel]).abs() < EPS);
+            }
+        }
+    }
+
+    /// "Aggressive" means the polarity stays bunched against the rim rather
+    /// than bleeding across the whole lobe.
+    #[test]
+    fn the_polarity_band_stays_near_the_rim() {
+        assert!((polarity_mix(1.0) - 1.0).abs() < EPS);
+        assert!(polarity_mix(0.0) < EPS);
+
+        // Half way in, almost nothing of the polarity colour is left.
+        assert!(
+            polarity_mix(0.5) < 0.05,
+            "mid-radius still carries {} of the rim colour",
+            polarity_mix(0.5)
+        );
+        // It only really takes hold in the outer fifth.
+        assert!(polarity_mix(0.8) < 0.4);
+        assert!(polarity_mix(0.95) > 0.7);
+    }
 
     /// Regression: `(a - b).abs()` reported ~2π for two angles straddling the
     /// ±π seam, which blanked the resultant field along that seam.

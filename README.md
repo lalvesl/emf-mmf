@@ -44,111 +44,34 @@ value and reports the resulting `q = S / (m · P)`, slot angle and phase angle.
 
 Besides the winding parameters, the panel toggles the endwinding arcs, the MMF
 arrows, the MMF field overlay (per phase and resultant), the rotor, and the
-winding-scheme window. It also reports the winding factors for the fundamental:
-`k_d` (distribution), `k_p` (pitch) and their product `k_w`.
+winding-scheme window.
 
-### Winding factors and the harmonic spectrum
+**Layers** is how many conductors sit in each slot. Two or more split the slot
+into two electrical layers, which is what makes short-pitching possible — with
+a single layer the option is unavailable.
 
-> Built behind the **`harmonics`** feature, on by default. It is demonstration
-> material rather than everyday content, so `cargo build --no-default-features`
-> drops the factors, the spectrum panel and their tests entirely.
+## What you can see
 
-`k_d = sin(qγ/2) / (q·sin(γ/2))` accounts for a phase being spread over `q`
-slots, and `k_p = sin(ν·(y/τ)·90°)` for its coils being chorded. At full pitch
-`|k_p| = 1` for every harmonic, which is precisely why chording is the only
-tool available against the low odd ones.
+- **The stator in 3D** — slots, conductors coloured by phase, and the coil
+  heads arcing between them.
+- **The MMF field** — per phase and resultant, animating with the currents.
+  A lobe's colour is its phase (white for the resultant), its outer rim is the
+  magnetic polarity (red north, blue south), and its opacity is the magnitude.
+- **MMF arrows** — one per phase per pole, plus the resultant, which turns at
+  synchronous speed alongside the rotor.
+- **The winding diagram** — slot-by-slot conductor layout and the MMF waveform,
+  in a separate window.
+- **The current waveforms** — playable and scrubbable, driving everything else.
 
-The winding-scheme window plots the harmonic spectrum of the real winding
-function, as a percentage of the fundamental. Each step is integrated in closed
-form rather than the function being sampled and transformed: sampling once per
-slot would cap the readable orders at `S/2`, which with 24 slots and two pole
-pairs stops at the fifth and folds the seventh back onto it.
-
-Because it reads the conductors as actually laid out, it needs no closed-form
-assumption — it stays correct for windings the textbook formulas do not cover,
-and it reflects the two electrical layers landing on different phases when the
-coils are chorded. Ticking short pitch on a `S=24, p=2, m=3` machine takes the
-fifth from 5.4% to 1.4% and the seventh from 3.8% to 1.0%, for 3.4% of the
-fundamental.
-
-### Slot filling and electrical layers
-
-**Layers** is the number of round conductors packed into a slot. They are laid
-out two per row, filling from the slot bottom towards the bore — `4` gives a
-2×2 stack, `6` gives 2×3:
-
-```
-        slot bottom (r = bore + SLOT_DEPTH)
-        ┌───────────────┐
-        │  (A)     (A)  │  deep half  → starts the coil at this slot
-        │  (C')    (C') │  shallow half → returns the coil from slot i-pitch
-        └───────────────┘
-        bore  (r = STATOR_BORE_RADIUS)
-```
-
-The stack is split into two *electrical* layers. The deep half carries the
-outgoing side of the coil starting at this slot; the shallow half carries the
-return side of the coil that started `coil_pitch` slots earlier — same phase,
-reversed direction.
-
-- **Full pitch** → both halves resolve to the same phase, so the slot behaves
-  exactly like a single-layer winding.
-- **Short-pitched** → the halves disagree at the belt boundaries, putting two
-  different phases in one slot. That is what chording physically is, and it is
-  only possible because the slot has two layers.
-
-`Layers = 1` collapses to the plain single-layer winding. Odd counts give the
-extra conductor to the deep half.
-
-### Why chording requires two layers
-
-A single-layer winding **cannot** be short-pitched, so the checkbox is disabled
-at `Layers = 1`.
-
-The airgap MMF depends only on which conductor sits in which slot carrying which
-current — the endwindings run outside the magnetic circuit and contribute
-nothing. With one coil side per slot, the phase-belt allocation already fixes the
-phase and polarity of every slot; the coils merely pair up slots that are
-already assigned. Changing their span would only reroute wire through the air,
-leaving the MMF and the winding factor untouched: `k_p ≡ 1`.
-
-Chording requires one slot to hold two coil sides that can belong to *different*
-phases — which is the definition of chording and the reason it needs two layers.
-Forcing a short span onto a single-layer winding does not chord it, it wires one
-phase into another phase's slot: with `S=24, p=2, m=3`, slot 0 (`A+`) would run
-to slot 5 (`B+`) instead of slot 6 (`A−`).
-
-(Concentric or "basket" single-layer windings do have coils of unequal span
-within a group, which is sometimes loosely called short-pitching. The group still
-occupies the same slots with the same polarities as the equivalent full-pitch
-winding, so the winding factor is unchanged — the unequal spans are a coil-
-insertion convenience, not an electromagnetic choice.)
-
-Endwinding arcs are drawn one per conductor, at the same gauge as the wire, and
-sweep radially so each arc actually meets the shallow conductor it connects to.
-
-With the endwindings shown, the slot conductors extend to sit flush with the
-core face and each arc begins with a straight axial run down to that same point,
-coaxial with the wire — the two butt together into a single continuous
-conductor. The straight run also lifts the arc clear of the face before it
-starts sweeping, so it does not cut through the teeth:
-
-```
-          ╭──────────────╮   ← arc (lift staggered by phase and conductor)
-          │              │
-          ╵              ╵   ← straight lead, clears the core face
-   ═══════╪══════════════╪═══  core face (y = STATOR_HEIGHT/2)
-          ║              ║   ← slot conductor, same axis and gauge
-```
-
-With the endwindings hidden the conductors shrink back inside the core so the
-current-direction symbols on their end faces stay readable.
+With the optional [`harmonics`](#cargo-features) feature the panel also reports
+the winding factors `k_d`, `k_p` and `k_w`, and the winding diagram gains a
+harmonic spectrum showing what short-pitching does to the 5th and 7th.
 
 ## Cargo features
 
 | Feature | Default | What it adds |
 | :------------ | :-----: | :----------------------------------------------------------------- |
-| `harmonics`   | **on**  | Winding factors (`k_d`, `k_p`, `k_w`) and the harmonic spectrum panel |
+| `harmonics`   | off     | Winding factors (`k_d`, `k_p`, `k_w`) and the harmonic spectrum panel |
 | `web`         | off     | WebAssembly target adjustments                                       |
 | `dev`         | off     | `bevy/dynamic_linking`, for faster incremental links                 |
 | `hotpatching` | off     | `bevy/hotpatching`, so `dx serve` can re-register systems live       |
@@ -210,27 +133,9 @@ They call `cargo` directly and do not need the Dioxus CLI:
 - `src/stator.rs`: Procedural stator mesh generation (yoke + teeth).
 - `src/winding/`: Phase-belt distribution, slot conductors, endwinding arcs and
   current-direction symbols.
-  - `axis.rs`: the winding's angular reference frame — slot centres, phase
-    displacement, magnetic axes. Every view that has to point at a magnetic
-    axis (arrows, field overlay, rotor) derives it from here rather than
-    re-deriving it locally.
-  - `SlotPacking` / `SlotLayout`: how conductors are arranged in a slot, split
-    into the dimensionless arrangement and its metric placement so the 2D
-    diagram and the 3D view cannot disagree.
 - `src/electrical.rs`: Electrical angle animation and the current waveform strip.
 - `src/mmf_field/`: MMF field overlay meshes (per phase and resultant).
-- `src/vectors/`: 3D MMF arrows. One per phase per pole, each pulsating along
-  its fixed axis; the resultant gets one arrow per pole *pair*, marking the
-  north axis. The souths sit halfway between the norths and mark nothing new.
-
-  The resultant's phasor sum is taken in **electrical** space, where the phase
-  axes are one phase displacement apart and a balanced set collapses to
-  `(m/2)·û(ωt)` — constant length, turning at `ω/p` mechanically, which is the
-  synchronous speed the rotor is already driven at. Summing the arrows as drawn
-  does not work: their mechanical axes are compressed by `1/p` while the
-  currents still shift by the full `α_m`, leaving a backward wave whose beat
-  against the forward one shrank the arrow to 33% of full length at four poles
-  and 4% at twelve.
+- `src/vectors/`: 3D MMF arrows per phase and pole.
 - `src/rotor/`: Rotor geometry, synchronised to the resultant MMF.
 - `src/winding_scheme/`: 2D winding diagram and MMF waveform window.
 - `src/phase/`: Phase colours and letters.
