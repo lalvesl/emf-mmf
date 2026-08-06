@@ -46,14 +46,14 @@ impl MmfFieldConfig {
         show: false,
         phases_to_show: [false; MAX_PHASES],
         show_result: false,
-        gradient_intensity: 0.5,
+        gradient_intensity: 2.0,
     };
 
     pub const MAX: Self = Self {
         show: true,
         phases_to_show: [true; MAX_PHASES],
         show_result: true,
-        gradient_intensity: 8.0,
+        gradient_intensity: 20.0,
     };
 }
 
