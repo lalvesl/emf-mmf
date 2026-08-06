@@ -2,9 +2,12 @@ use bevy::prelude::*;
 
 /// Upper bound on the number of phases the simulator supports.
 ///
-/// This is both the length of [`MmfFieldConfig::phases_to_show`] and the
-/// `phases` field of [`MotorConfig::MAX`], so the two can never drift apart.
-pub const MAX_PHASES: usize = 10;
+/// This is the length of [`MmfFieldConfig::phases_to_show`], the `phases` field
+/// of [`MotorConfig::MAX`] and the size of the phase palette, so none of the
+/// three can drift apart. The palette is what fixes the value: each phase gets
+/// a hand-picked colour that has to stay clear of the two the field overlay
+/// reserves for magnetic polarity, and eight is as far as that stretches.
+pub const MAX_PHASES: usize = 8;
 
 #[derive(Resource, Clone, Debug)]
 pub struct MmfFieldConfig {

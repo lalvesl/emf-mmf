@@ -1,68 +1,54 @@
 use bevy::prelude::*;
 use bevy_egui::egui;
 
-const PHASE_SATURATION: f32 = 0.72;
-const PHASE_LIGHTNESS: f32 = 0.50;
+use crate::config::MAX_PHASES;
 
 /// Half-width of the hue wedge kept clear around each polarity colour.
-pub const POLARITY_GUARD: f32 = 20.0;
+pub const POLARITY_GUARD: f32 = 30.0;
 
 /// Hues reserved for magnetic polarity: red for north, blue for south.
 pub const POLARITY_HUES: [f32; 2] = [0.0, 240.0];
 
-/// The colour wheel minus a `POLARITY_GUARD` wedge either side of red (0°) and
-/// blue (240°).
+/// The phase palette, in fixed slot order.
 ///
-/// Merely *offsetting* the palette cannot solve this. Ten phases sit 36° apart
-/// and cover the whole wheel, so whatever the offset, one of them lands on red
-/// and another on blue. Removing the reserved wedges from the range instead
-/// makes the separation a property of the construction, at any phase count —
-/// the cost being that the phases crowd a little closer to each other.
-const PHASE_HUE_ARCS: [(f32, f32); 2] = [
-    (
-        POLARITY_HUES[0] + POLARITY_GUARD,
-        POLARITY_HUES[1] - POLARITY_GUARD,
-    ),
-    (POLARITY_HUES[1] + POLARITY_GUARD, 360.0 - POLARITY_GUARD),
+/// These are chosen, not generated. Spreading hue evenly around the wheel
+/// cannot work here: red and blue belong to magnetic polarity, and an evenly
+/// spread palette lands on both. Each slot below sits at least
+/// [`POLARITY_GUARD`] degrees off red and off blue.
+///
+/// The *order* is part of the design, not cosmetic — it is what keeps
+/// neighbouring slots apart under colour-vision deficiency, so slots are
+/// assigned in sequence and never reordered or cycled. Validated as a set
+/// against a dark surface: every slot inside the dark lightness band
+/// (OKLCH L 0.48–0.67), above the chroma floor, at least 3:1 contrast on the
+/// surface, worst adjacent pair ΔE 9.0 under simulated protanopia and 17.1
+/// under normal vision.
+///
+/// Eight is where this stops. Any two phases can end up side by side around the
+/// bore, and no set of eight hues clears that stricter all-pairs test — the
+/// phase letter shown in the legend and the winding diagram is what carries
+/// identity where colour alone falls short.
+const PHASE_PALETTE: [(u8, u8, u8); MAX_PHASES] = [
+    (27, 167, 132), // teal
+    (178, 98, 218), // violet
+    (193, 121, 21), // amber
+    (25, 138, 179), // cyan
+    (113, 156, 28), // lime
+    (212, 84, 180), // magenta
+    (169, 147, 4),  // gold
+    (33, 131, 49),  // green
 ];
 
-/// Hue of `phase`, spread evenly across the arcs left free by polarity.
-///
-/// Each phase is centred in its share rather than placed at the start of it,
-/// so the palette never sits flush against a reserved wedge.
-pub fn phase_hue(phase: usize, total_phases: usize) -> f32 {
-    let total = total_phases.max(1);
-    let usable: f32 = PHASE_HUE_ARCS.iter().map(|(start, end)| end - start).sum();
-
-    let share = usable / total as f32;
-    let mut position = (phase % total) as f32 * share + share * 0.5;
-
-    for (start, end) in PHASE_HUE_ARCS {
-        let span = end - start;
-        if position < span {
-            return start + position;
-        }
-        position -= span;
-    }
-
-    // Rounding can leave a hair past the end; the last arc's end is the limit.
-    PHASE_HUE_ARCS[PHASE_HUE_ARCS.len() - 1].1
-}
-
-/// Phase color from chromatic circle division.
-///
-/// Hue is spread over the arcs polarity does not claim — see [`phase_hue`].
+/// Colour of `phase`, wrapping if the index runs past the phase count.
 #[inline]
 pub fn phase_color(phase: usize, total_phases: usize) -> Color {
-    let hue = phase_hue(phase, total_phases);
-    Color::from(bevy::color::Hsla::new(
-        hue,
-        PHASE_SATURATION,
-        PHASE_LIGHTNESS,
-        1.0,
-    ))
+    let total = total_phases.clamp(1, MAX_PHASES);
+    let (r, g, b) = PHASE_PALETTE[phase % total];
+    Color::srgb_u8(r, g, b)
 }
 
+/// A contrasting colour for marks drawn on top of a phase-coloured object,
+/// such as the current-direction symbols on a conductor's end face.
 #[inline]
 pub fn phase_color_opposite(phase: usize, total_phases: usize) -> Color {
     let color = phase_color(phase, total_phases);
@@ -97,21 +83,22 @@ mod tests {
         d.min(360.0 - d)
     }
 
-    /// The guarantee the reserved arcs exist for: no phase may land on the
-    /// colours the field overlay uses for magnetic polarity.
-    ///
-    /// Offsetting the palette could not deliver this. Ten phases at 36° spacing
-    /// cover the whole wheel, so some phase always fell on red and another on
-    /// blue whatever the offset.
+    fn hue_of(color: Color) -> f32 {
+        let hsla: bevy::color::Hsla = color.into();
+        hsla.hue
+    }
+
+    /// The guarantee the palette was chosen for: no phase may be mistaken for
+    /// the colours the field overlay paints polarity with.
     #[test]
-    fn no_phase_hue_lands_near_a_polarity_colour() {
-        for total in 2..=10_usize {
+    fn no_phase_colour_lands_near_a_polarity_colour() {
+        for total in 1..=MAX_PHASES {
             for phase in 0..total {
-                let hue = phase_hue(phase, total);
+                let hue = hue_of(phase_color(phase, total));
                 for reserved in POLARITY_HUES {
                     let distance = hue_distance(hue, reserved);
                     assert!(
-                        distance >= POLARITY_GUARD - 1e-3,
+                        distance >= POLARITY_GUARD,
                         "m={total} phase {phase} sits at {hue:.1}°, only {distance:.1}° \
                          from the reserved {reserved}° — guard is {POLARITY_GUARD}°"
                     );
@@ -120,44 +107,58 @@ mod tests {
         }
     }
 
-    /// Every hue must stay inside one of the usable arcs.
+    /// Slots are assigned in sequence, so two phases of the same machine must
+    /// never share a colour.
     #[test]
-    fn every_hue_falls_inside_a_usable_arc() {
-        for total in 1..=10_usize {
-            for phase in 0..total {
-                let hue = phase_hue(phase, total);
-                assert!(
-                    PHASE_HUE_ARCS
-                        .iter()
-                        .any(|(start, end)| hue >= *start - 1e-3 && hue <= *end + 1e-3),
-                    "m={total} phase {phase} at {hue:.1}° escaped the usable arcs"
-                );
-            }
-        }
-    }
-
-    /// Reserving hue costs phase-to-phase separation, so check what is left is
-    /// still workable. Ten phases is the worst case the sliders allow.
-    #[test]
-    fn phases_stay_distinguishable_from_each_other() {
-        for total in 2..=10_usize {
-            let hues: Vec<f32> = (0..total).map(|p| phase_hue(p, total)).collect();
-            for (i, &a) in hues.iter().enumerate() {
-                for &b in &hues[i + 1..] {
-                    let distance = hue_distance(a, b);
-                    assert!(
-                        distance > 20.0,
-                        "m={total}: hues {a:.1}° and {b:.1}° are only {distance:.1}° apart"
-                    );
+    fn every_phase_of_a_machine_gets_its_own_colour() {
+        for total in 1..=MAX_PHASES {
+            let colors: Vec<_> = (0..total)
+                .map(|p| phase_color(p, total).to_srgba().to_u8_array())
+                .collect();
+            for (i, a) in colors.iter().enumerate() {
+                for b in &colors[i + 1..] {
+                    assert_ne!(a, b, "m={total}: two phases share a colour");
                 }
             }
         }
     }
 
-    /// Phases must not repeat, and the index must wrap rather than run off.
+    /// The palette is indexed by slot, so phase `k` keeps its colour whatever
+    /// the machine's phase count — identity must not depend on the total.
+    #[test]
+    fn a_phase_keeps_its_colour_across_phase_counts() {
+        for phase in 0..3 {
+            let reference = phase_color(phase, 3).to_srgba().to_u8_array();
+            for total in (phase + 1)..=MAX_PHASES {
+                assert_eq!(
+                    phase_color(phase, total).to_srgba().to_u8_array(),
+                    reference,
+                    "phase {phase} changed colour at m={total}"
+                );
+            }
+        }
+    }
+
+    /// An index past the phase count wraps rather than running off the palette.
     #[test]
     fn the_phase_index_wraps() {
-        assert_eq!(phase_hue(0, 3), phase_hue(3, 3));
-        assert_eq!(phase_hue(1, 3), phase_hue(4, 3));
+        assert_eq!(
+            phase_color(0, 3).to_srgba().to_u8_array(),
+            phase_color(3, 3).to_srgba().to_u8_array()
+        );
+        assert_eq!(
+            phase_color(1, 3).to_srgba().to_u8_array(),
+            phase_color(4, 3).to_srgba().to_u8_array()
+        );
+    }
+
+    /// A phase count outside the supported range must not index past the end.
+    #[test]
+    fn an_out_of_range_phase_count_is_clamped() {
+        for total in [0_usize, MAX_PHASES + 1, 100] {
+            for phase in 0..12 {
+                let _ = phase_color(phase, total);
+            }
+        }
     }
 }

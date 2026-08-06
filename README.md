@@ -34,7 +34,7 @@ The application provides a UI panel to configure the following motor winding par
 | Parameter          | Range   | Description                                                                |
 | ------------------ | ------- | -------------------------------------------------------------------------- |
 | **Grooves (S)**    | 6–144   | Total number of slots/grooves in the stator                                |
-| **Phases (m)**     | 2–10    | Number of electrical phases                                                |
+| **Phases (m)**     | 2–8     | Number of electrical phases                                                |
 | **Poles (P)**      | 2–12    | Total magnetic poles, always even (pole pairs `p` = P/2)                    |
 | **Short-pitched**  | on/off  | Chorded coils, to reduce harmonics. Requires `Layers ≥ 2` (see below)      |
 | **Layers**         | 1–6     | Conductors packed into each slot (see below)                                |
