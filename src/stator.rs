@@ -11,20 +11,16 @@ use crate::config::*;
 pub struct StatorPart;
 
 /// System: regenerate stator mesh when config changes.
+/// Runs on `resource_changed::<MotorConfig>` alone: visibility toggles live in
+/// [`crate::config::ViewConfig`] and never affect the iron, so they must not
+/// pay for a full rebuild.
 pub fn regenerate_stator(
     mut commands: Commands,
     config: Res<MotorConfig>,
-    mut ev_config: MessageReader<MotorConfigChanged>,
     query: Query<Entity, With<StatorPart>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Visibility toggles never affect the iron, so they must not pay for a
-    // full rebuild. `count()` (not `any()`) so the reader is always drained.
-    if ev_config.read().filter(|e| e.geometry).count() == 0 {
-        return;
-    }
-
     // Despawn old geometry
     for entity in &query {
         commands.entity(entity).despawn();
