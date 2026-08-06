@@ -1,7 +1,7 @@
 use crate::config::{MAX_PHASES, MmfFieldConfig, MotorConfig, ViewConfig};
 use crate::i18n::Strings;
 use crate::phase;
-use crate::ui::{float_slider, slider_caption, toggle_row};
+use crate::ui::{color_chip, float_slider, slider_caption, toggle_row};
 use bevy_egui::egui;
 use egui_sc::egui_components::{Size, Spacing, Toggle, Tooltip};
 use i18n::t;
@@ -87,8 +87,6 @@ fn phase_toggle(
     label: &str,
     hover: &str,
 ) {
-    const DOT_RADIUS: f32 = 4.0;
-
     let font = Size::Sm.font_size();
     Tooltip::new(hover).wrap(ui, |ui| {
         Toggle::custom(shown)
@@ -97,11 +95,8 @@ fn phase_toggle(
             .show_with(ui, |ui| {
                 // The surface itself cannot carry the phase colour — its fill
                 // is what reports pressed or not — so the colour rides along
-                // as a dot. `Sense::hover` keeps it from eating the click that
-                // would otherwise flip the toggle.
-                let (rect, _) = ui
-                    .allocate_exact_size(egui::Vec2::splat(DOT_RADIUS * 2.0), egui::Sense::hover());
-                ui.painter().circle_filled(rect.center(), DOT_RADIUS, color);
+                // as a chip, the same one the phase legend uses.
+                color_chip(ui, color);
 
                 // A plain label, not `small_text`: the typography helpers pin
                 // an explicit colour, and an explicit colour beats the
