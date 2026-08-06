@@ -1,12 +1,15 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use egui_sc::egui_components::{Separator, ShadcnTheme, Spacing, heading4};
+use i18n::t;
 #[cfg(feature = "harmonics")]
 use std::f32::consts::{PI, TAU};
 
 use crate::config::MotorConfig;
 use crate::electrical::ElectricalState;
-use crate::i18n::{self, Language};
+use crate::i18n::Strings;
 use crate::phase;
+use crate::ui::PanelLayout;
 use crate::winding::{
     Conductor, Direction, SlotPacking, axis, compute_conductors, compute_winding,
 };
@@ -15,7 +18,14 @@ pub struct WindingSchemePlugin;
 
 impl Plugin for WindingSchemePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(EguiPrimaryContextPass, winding_scheme_window);
+        // After the theme stage: every component and painter below reads the
+        // theme out of context memory, which is empty until it is published.
+        app.add_systems(
+            EguiPrimaryContextPass,
+            winding_scheme_window
+                .after(PanelLayout::Theme)
+                .run_if(crate::theme::fonts_ready),
+        );
     }
 }
 
@@ -26,7 +36,6 @@ fn winding_scheme_window(
     mut contexts: EguiContexts,
     config: Res<MotorConfig>,
     state: Res<ElectricalState>,
-    lang: Res<Language>,
 ) {
     if !config.show_winding_scheme {
         return;
@@ -36,7 +45,7 @@ fn winding_scheme_window(
         return;
     };
 
-    egui::Window::new(i18n::t(&lang, "winding_scheme_title"))
+    egui::Window::new(t!(Strings::WindingSchemeTitle).into_owned())
         .id(egui::Id::new("winding_scheme_window"))
         .default_width(620.0)
         .min_width(400.0)
@@ -53,37 +62,34 @@ fn winding_scheme_window(
                 egui::vec2(ui.available_width(), conductor_panel_height),
                 egui::Sense::hover(),
             );
-            draw_conductor_panel(ui, rect_top, &config, &conductors, &lang);
+            draw_conductor_panel(ui, rect_top, &config, &conductors);
 
-            ui.add_space(4.0);
-            ui.separator();
-            ui.add_space(4.0);
+            Spacing::Xs.show(ui);
+            Separator::horizontal().show(ui);
+            Spacing::Xs.show(ui);
 
             // ── Bottom panel: MMF waveforms ─────────────────────────────────
-            ui.label(egui::RichText::new(i18n::t(&lang, "winding_function_mmf")).strong());
+            heading4(ui, &t!(Strings::WindingFunctionMmf));
             let waveform_panel_height = 180.0_f32;
             let (rect_bot, _) = ui.allocate_exact_size(
                 egui::vec2(ui.available_width(), waveform_panel_height),
                 egui::Sense::hover(),
             );
-            draw_mmf_panel(ui, rect_bot, &config, &conductors, state.angle, &lang);
+            draw_mmf_panel(ui, rect_bot, &config, &conductors, state.angle);
 
-            spectrum_section(ui, &config, &conductors, &lang);
+            spectrum_section(ui, &config, &conductors);
         });
 }
 
 /// The harmonic spectrum section of the window.
 #[cfg(feature = "harmonics")]
-fn spectrum_section(
-    ui: &mut egui::Ui,
-    config: &MotorConfig,
-    conductors: &[Conductor],
-    lang: &Language,
-) {
-    ui.add_space(4.0);
-    ui.separator();
-    ui.add_space(4.0);
-    ui.label(egui::RichText::new(i18n::t(lang, "harmonic_spectrum")).strong());
+fn spectrum_section(ui: &mut egui::Ui, config: &MotorConfig, conductors: &[Conductor]) {
+    use crate::i18n::HarmonicStrings;
+
+    Spacing::Xs.show(ui);
+    Separator::horizontal().show(ui);
+    Spacing::Xs.show(ui);
+    heading4(ui, &t!(HarmonicStrings::HarmonicSpectrum));
     let (rect, _) = ui.allocate_exact_size(
         egui::vec2(ui.available_width(), 150.0),
         egui::Sense::hover(),
@@ -92,7 +98,7 @@ fn spectrum_section(
 }
 
 #[cfg(not(feature = "harmonics"))]
-fn spectrum_section(_: &mut egui::Ui, _: &MotorConfig, _: &[Conductor], _: &Language) {}
+fn spectrum_section(_: &mut egui::Ui, _: &MotorConfig, _: &[Conductor]) {}
 
 /// Highest electrical harmonic the spectrum shows.
 #[cfg(feature = "harmonics")]
@@ -169,8 +175,8 @@ fn draw_conductor_panel(
     rect: egui::Rect,
     config: &MotorConfig,
     conductors: &[crate::winding::Conductor],
-    _lang: &Language,
 ) {
+    let theme = ShadcnTheme::get(ui.ctx());
     let painter = ui.painter_at(rect);
     let n = config.groove_count;
 
@@ -191,7 +197,7 @@ fn draw_conductor_panel(
         let x = rect.left() + padding + (s as f32 + 0.5) * slot_step;
         painter.line_segment(
             [egui::pos2(x, cy), egui::pos2(x, cy - 5.0)],
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(60, 60, 80)),
+            egui::Stroke::new(1.0, theme.border),
         );
     }
 
@@ -262,14 +268,14 @@ fn draw_mmf_panel(
     config: &MotorConfig,
     conductors: &[crate::winding::Conductor],
     elec_angle: f32,
-    lang: &Language,
 ) {
+    let theme = ShadcnTheme::get(ui.ctx());
     let painter = ui.painter_at(rect);
     let n = config.groove_count;
     let m = config.phases;
 
     // Background
-    painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 20, 28));
+    painter.rect_filled(rect, plot_corner(&theme), theme.muted);
 
     // ── Compute winding-function / MMF waveforms ─────────────────────────────
     // The winding function N_k(θ) for phase k is the sum of all conductors weighted by
@@ -376,7 +382,7 @@ fn draw_mmf_panel(
     painter.rect_stroke(
         plot_rect,
         2.0,
-        egui::Stroke::new(1.0, egui::Color32::from_rgb(60, 60, 80)),
+        egui::Stroke::new(1.0, theme.border),
         egui::StrokeKind::Middle,
     );
 
@@ -388,7 +394,7 @@ fn draw_mmf_panel(
                 egui::pos2(plot_rect.left(), y0),
                 egui::pos2(plot_rect.right(), y0),
             ],
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(70, 70, 90)),
+            egui::Stroke::new(1.0, axis_color(&theme)),
         );
     }
 
@@ -400,7 +406,7 @@ fn draw_mmf_panel(
                 egui::pos2(x, plot_rect.top()),
                 egui::pos2(x, plot_rect.bottom()),
             ],
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 40, 55)),
+            egui::Stroke::new(1.0, grid_color(&theme)),
         );
         let label = match (tick_frac * 8.0) as u32 {
             0 => "0",
@@ -415,7 +421,7 @@ fn draw_mmf_panel(
             egui::Align2::CENTER_CENTER,
             label,
             egui::FontId::proportional(9.0),
-            egui::Color32::from_rgb(110, 110, 130),
+            theme.muted_foreground,
         );
     }
 
@@ -427,7 +433,7 @@ fn draw_mmf_panel(
             egui::Align2::RIGHT_CENTER,
             format!("{:.0}", v),
             egui::FontId::proportional(8.0),
-            egui::Color32::from_rgb(110, 110, 130),
+            theme.muted_foreground,
         );
     }
 
@@ -442,13 +448,13 @@ fn draw_mmf_panel(
         );
     }
 
-    // Draw total MMF (bold green)
-    let green = egui::Color32::from_rgb(60, 210, 80);
+    // Draw total MMF (bold, and the one colour nothing else in the plot uses)
+    let total_color = theme.success;
     draw_polyline(
         &painter,
         |i| to_screen(i, total_mmf.get(i).copied().unwrap_or(0.0)),
         WAVEFORM_SAMPLES,
-        green,
+        total_color,
         2.5,
     );
 
@@ -456,9 +462,9 @@ fn draw_mmf_panel(
     painter.text(
         egui::pos2(plot_rect.center().x, rect.bottom() - 4.0),
         egui::Align2::CENTER_CENTER,
-        i18n::t(lang, "mechanical_angle"),
+        t!(Strings::MechanicalAngle),
         egui::FontId::proportional(9.0),
-        egui::Color32::from_rgb(130, 130, 150),
+        theme.muted_foreground,
     );
 
     // Legend
@@ -469,8 +475,7 @@ fn draw_mmf_panel(
         for k in 0..m {
             let col = phase::colors::phase_color_egui(k, m);
             let letter = crate::phase::letter::phase_letter(k);
-            let raw_label = i18n::t(lang, "phase_wf");
-            let label = raw_label.replace("{}", &letter.to_string());
+            let label = t!(Strings::PhaseWf, phase = letter.to_string());
             painter.line_segment(
                 [egui::pos2(lx, ly), egui::pos2(lx + 14.0, ly)],
                 egui::Stroke::new(1.5, col),
@@ -478,7 +483,7 @@ fn draw_mmf_panel(
             painter.text(
                 egui::pos2(lx + 16.0, ly),
                 egui::Align2::LEFT_CENTER,
-                &label,
+                label.as_ref(),
                 egui::FontId::proportional(8.5),
                 col,
             );
@@ -488,19 +493,34 @@ fn draw_mmf_panel(
         // total mmf legend
         painter.line_segment(
             [egui::pos2(lx, ly), egui::pos2(lx + 14.0, ly)],
-            egui::Stroke::new(2.5, green),
+            egui::Stroke::new(2.5, total_color),
         );
         painter.text(
             egui::pos2(lx + 16.0, ly),
             egui::Align2::LEFT_CENTER,
-            i18n::t(lang, "total_mmf"),
+            t!(Strings::TotalMmf),
             egui::FontId::proportional(8.5),
-            green,
+            total_color,
         );
     }
 }
 
 // ─── Drawing helpers ─────────────────────────────────────────────────────────
+
+/// Corner radius for a plot surface, from the theme's own radius.
+fn plot_corner(theme: &ShadcnTheme) -> egui::CornerRadius {
+    egui::CornerRadius::same(theme.radius as u8)
+}
+
+/// The zero line and other axes a reader should notice but not read past.
+fn axis_color(theme: &ShadcnTheme) -> egui::Color32 {
+    ShadcnTheme::with_alpha(theme.muted_foreground, 90)
+}
+
+/// Reference gridlines — present, but never competing with the curves.
+fn grid_color(theme: &ShadcnTheme) -> egui::Color32 {
+    ShadcnTheme::with_alpha(theme.muted_foreground, 40)
+}
 
 /// Draw a polyline from a closure that maps sample index → screen position.
 ///
@@ -530,8 +550,9 @@ fn draw_spectrum_panel(
     config: &MotorConfig,
     conductors: &[Conductor],
 ) {
+    let theme = ShadcnTheme::get(ui.ctx());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 20, 28));
+    painter.rect_filled(rect, plot_corner(&theme), theme.muted);
 
     let spectrum = winding_function_spectrum(config, conductors);
     // An invalid configuration produces no conductors at all, so there is no
@@ -556,7 +577,7 @@ fn draw_spectrum_panel(
     painter.rect_stroke(
         plot,
         2.0,
-        egui::Stroke::new(1.0, egui::Color32::from_rgb(60, 60, 80)),
+        egui::Stroke::new(1.0, theme.border),
         egui::StrokeKind::Middle,
     );
 
@@ -572,14 +593,14 @@ fn draw_spectrum_panel(
         let y = plot.bottom() - frac * plot.height();
         painter.line_segment(
             [egui::pos2(plot.left(), y), egui::pos2(plot.right(), y)],
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 40, 55)),
+            egui::Stroke::new(1.0, grid_color(&theme)),
         );
         painter.text(
             egui::pos2(rect.left() + pad_l - 5.0, y),
             egui::Align2::RIGHT_CENTER,
             format!("{:.0}%", frac * 100.0),
             egui::FontId::proportional(9.0),
-            egui::Color32::from_rgb(110, 110, 130),
+            theme.muted_foreground,
         );
     }
 
@@ -591,9 +612,9 @@ fn draw_spectrum_panel(
         // The fundamental is the reference; the 5th and 7th are the pair that
         // chording exists to suppress, so they are called out.
         let color = match harmonic {
-            1 => egui::Color32::from_rgb(90, 190, 120),
-            5 | 7 => egui::Color32::from_rgb(230, 140, 90),
-            _ => egui::Color32::from_rgb(110, 120, 160),
+            1 => theme.success,
+            5 | 7 => theme.warning,
+            _ => theme.muted_foreground,
         };
 
         let bar = egui::Rect::from_min_max(
@@ -607,7 +628,7 @@ fn draw_spectrum_panel(
             egui::Align2::CENTER_CENTER,
             harmonic.to_string(),
             egui::FontId::proportional(9.0),
-            egui::Color32::from_rgb(140, 140, 160),
+            theme.muted_foreground,
         );
 
         // The harmonics sit far below the fundamental once the `1/ν` of the
