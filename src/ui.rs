@@ -1,8 +1,17 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
+use egui_sc::egui_components::{
+    Alert, AlertVariant, Boxed, Button, ButtonGroup, ButtonGroupVariant, ButtonSize, ButtonVariant,
+    Checkbox, ICON_CHECK_CIRCLE, ICON_CHEVRON_LEFT, ICON_LANGUAGE, ICON_MOUSE, ICON_TUNE,
+    ICON_ZOOM_IN, Icon, Separator, ShadcnTheme, Size, Slider, Spacing, Switch, Tooltip, heading4,
+    muted_text, small_text,
+};
+// Absolute path: `crate::i18n` below binds the name `i18n` in this module, and
+// the macro lives in the crate of the same name.
+use ::i18n::t;
 
 use crate::config::{MotorConfig, MotorConfigChanged};
-use crate::i18n::{Language, t};
+use crate::i18n::{self, Strings};
 use crate::phase;
 
 pub struct UiPlugin;
@@ -10,17 +19,26 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(EguiPlugin::default())
-            .init_resource::<Language>()
+            .add_plugins(i18n::I18nPlugin)
+            .add_plugins(crate::theme::ThemePlugin)
             .init_resource::<PanelSpace>()
             .configure_sets(
                 EguiPrimaryContextPass,
-                (PanelLayout::Reset, PanelLayout::Side, PanelLayout::Bottom).chain(),
+                (
+                    PanelLayout::Theme,
+                    PanelLayout::Reset,
+                    PanelLayout::Side,
+                    PanelLayout::Bottom,
+                )
+                    .chain(),
             )
             .add_systems(
                 EguiPrimaryContextPass,
                 (
                     reset_panel_space.in_set(PanelLayout::Reset),
-                    ui_panel.in_set(PanelLayout::Side),
+                    ui_panel
+                        .in_set(PanelLayout::Side)
+                        .run_if(crate::theme::fonts_ready),
                 ),
             );
     }
@@ -66,6 +84,8 @@ impl PanelSpace {
 /// a later stage only ever sees what the earlier ones left behind.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PanelLayout {
+    /// Publishes the Shadcn theme every component reads from.
+    Theme,
     /// Restores the full viewport as available space.
     Reset,
     /// Panels docked to a side edge.
@@ -74,41 +94,124 @@ pub enum PanelLayout {
     Bottom,
 }
 
+// ─── Shared widget helpers ────────────────────────────────────────────────────
+
+/// What a [`Slider`] did this frame.
+///
+/// The component senses drags only and never marks its `Response` as changed,
+/// so both facts have to be derived here: `changed` by comparing the value, and
+/// `settled` from the end of the drag.
+pub struct SliderEdit {
+    /// The value moved this frame — apply it so readouts follow the handle.
+    pub changed: bool,
+    /// The drag ended — safe to commit something expensive.
+    pub settled: bool,
+}
+
+/// A slider over an integer parameter.
+///
+/// Regenerating the scene rebuilds hundreds of meshes, so a drag commits once
+/// on release; the value itself is applied every frame regardless, which is
+/// what keeps the readout in the label honest.
+pub fn int_slider(
+    ui: &mut egui::Ui,
+    value: &mut usize,
+    min: usize,
+    max: usize,
+    step: usize,
+) -> SliderEdit {
+    let mut raw = *value as f32;
+    let response = Slider::new(&mut raw, min as f32, max as f32)
+        .step(step.max(1) as f32)
+        .show(ui);
+
+    let stepped = (raw.round() as usize).clamp(min, max);
+    let changed = stepped != *value;
+    *value = stepped;
+
+    SliderEdit {
+        changed,
+        settled: response.drag_stopped(),
+    }
+}
+
+/// A labelled row that carries a value, above the control it belongs to.
+///
+/// The component slider paints no readout of its own, so the number lives here.
+pub fn slider_caption(ui: &mut egui::Ui, text: &str) {
+    muted_text(ui, text);
+}
+
+/// A phase's colour chip, with the phase name on hover.
+pub fn phase_swatch(ui: &mut egui::Ui, color: egui::Color32, hover: &str) -> egui::Response {
+    let radius = ShadcnTheme::get(ui.ctx()).radius * 0.5;
+    Tooltip::new(hover).wrap(ui, |ui| {
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+        ui.painter()
+            .rect_filled(rect, egui::CornerRadius::same(radius as u8), color);
+        response
+    })
+}
+
+/// A visibility toggle: label, optional tooltip, and whether it flipped.
+pub fn toggle_row(ui: &mut egui::Ui, value: &mut bool, label: &str, hover: Option<&str>) -> bool {
+    match hover {
+        Some(hover) => Tooltip::new(hover)
+            .wrap(ui, |ui| Switch::new(value).label(label).show(ui))
+            .clicked(),
+        None => Switch::new(value).label(label).show(ui).clicked(),
+    }
+}
+
+// ─── Winding factors (optional) ───────────────────────────────────────────────
+
 /// Winding factors for the fundamental: what fraction of the ideal MMF this
 /// winding actually produces, and where it went. `k_p` drops below 1 only when
 /// the coils are chorded.
 #[cfg(feature = "harmonics")]
-fn winding_factor_labels(ui: &mut egui::Ui, config: &MotorConfig, lang: &Language) {
+fn winding_factor_labels(ui: &mut egui::Ui, config: &MotorConfig) {
+    use crate::i18n::HarmonicStrings;
     use crate::winding::axis;
 
     let k_d = axis::distribution_factor(config, 1);
     let k_p = axis::pitch_factor(config, 1);
 
-    ui.label(format!(
-        "{} (k_d): {:.4}",
-        t(lang, "distribution_factor"),
-        k_d.abs()
-    ))
-    .on_hover_text(t(lang, "distribution_factor_hover"));
-    ui.label(format!(
-        "{} (k_p): {:.4}",
-        t(lang, "pitch_factor"),
-        k_p.abs()
-    ))
-    .on_hover_text(t(lang, "pitch_factor_hover"));
-    ui.label(
-        egui::RichText::new(format!(
-            "{} (k_w=k_d.k_p): {:.4}",
-            t(lang, "winding_factor"),
-            (k_d * k_p).abs()
-        ))
-        .strong(),
-    )
-    .on_hover_text(t(lang, "winding_factor_hover"));
+    let factor = |ui: &mut egui::Ui, text: String, hover: &str| {
+        Tooltip::new(hover).wrap(ui, |ui| ui.scope(|ui| muted_text(ui, &text)).response);
+    };
+
+    factor(
+        ui,
+        format!(
+            "{} (k_d): {:.4}",
+            t!(HarmonicStrings::DistributionFactor),
+            k_d.abs()
+        ),
+        &t!(HarmonicStrings::DistributionFactorHover),
+    );
+    factor(
+        ui,
+        format!(
+            "{} (k_p): {:.4}",
+            t!(HarmonicStrings::PitchFactor),
+            k_p.abs()
+        ),
+        &t!(HarmonicStrings::PitchFactorHover),
+    );
+
+    let winding = format!(
+        "{} (k_w=k_d.k_p): {:.4}",
+        t!(HarmonicStrings::WindingFactor),
+        (k_d * k_p).abs()
+    );
+    Tooltip::new(&t!(HarmonicStrings::WindingFactorHover))
+        .wrap(ui, |ui| ui.scope(|ui| small_text(ui, &winding)).response);
 }
 
 #[cfg(not(feature = "harmonics"))]
-fn winding_factor_labels(_: &mut egui::Ui, _: &MotorConfig, _: &Language) {}
+fn winding_factor_labels(_: &mut egui::Ui, _: &MotorConfig) {}
+
+// ─── Panel ────────────────────────────────────────────────────────────────────
 
 fn reset_panel_space(mut contexts: EguiContexts, mut space: ResMut<PanelSpace>) {
     if let Ok(ctx) = contexts.ctx_mut() {
@@ -119,7 +222,6 @@ fn reset_panel_space(mut contexts: EguiContexts, mut space: ResMut<PanelSpace>) 
 fn ui_panel(
     mut contexts: EguiContexts,
     mut config: ResMut<MotorConfig>,
-    mut lang: ResMut<Language>,
     mut ev_writer: MessageWriter<MotorConfigChanged>,
     mut space: ResMut<PanelSpace>,
     mut first_frame: Local<bool>,
@@ -144,203 +246,68 @@ fn ui_panel(
         egui::Area::new(egui::Id::new("maximize_panel_area"))
             .anchor(egui::Align2::LEFT_TOP, egui::vec2(10.0, 10.0))
             .show(ctx, |ui| {
-                if ui.button(t(&lang, "motor_config_btn")).clicked() {
+                if Button::new(&t!(Strings::MotorConfigBtn))
+                    .icon(ICON_TUNE)
+                    .variant(ButtonVariant::Secondary)
+                    .show(ui)
+                    .clicked()
+                {
                     *minimized = false;
                 }
             });
     } else {
         egui::Panel::left("motor_config_panel")
             .min_size(220.0)
-            .default_size(260.0)
+            .default_size(280.0)
             .show(&mut viewport_ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.heading(t(&lang, "motor_config_heading"));
+                    heading4(ui, &t!(Strings::MotorConfigHeading));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .button("⏴")
-                            .on_hover_text(t(&lang, "minimize_panel_hover"))
-                            .clicked()
-                        {
+                        let clicked = Tooltip::new(&t!(Strings::MinimizePanelHover))
+                            .wrap(ui, |ui| {
+                                Button::new("")
+                                    .icon(ICON_CHEVRON_LEFT)
+                                    .variant(ButtonVariant::Ghost)
+                                    .size(ButtonSize::Icon)
+                                    .show(ui)
+                            })
+                            .clicked();
+                        if clicked {
                             *minimized = true;
                         }
                     });
                 });
 
-                // Language selector
-                ui.horizontal(|ui| {
-                    ui.label("🌐");
-                    if ui.selectable_label(*lang == Language::PtBr, "PT").clicked() {
-                        *lang = Language::PtBr;
-                    }
-                    if ui.selectable_label(*lang == Language::En, "EN").clicked() {
-                        *lang = Language::En;
-                    }
-                });
+                language_selector(ui);
 
-                ui.separator();
-                ui.add_space(8.0);
+                Spacing::Sm.show(ui);
+                Separator::horizontal().show(ui);
+                Spacing::Sm.show(ui);
 
-                // Groove count
-                let mut grooves = config.groove_count as i32;
-                ui.label(format!("{} (S)", t(&lang, "grooves")));
-                let response = ui.add(egui::Slider::new(
-                    &mut grooves,
-                    (MotorConfig::MIN.groove_count as i32)..=(MotorConfig::MAX.groove_count as i32),
-                ));
-                if response.changed() {
-                    config.groove_count = grooves as usize;
-                    clamp_config(&mut config);
-                }
-                geometry_changed |= slider_settled(&response);
-                ui.add_space(4.0);
+                geometry_changed |= machine_controls(ui, &mut config);
 
-                // Phases
-                let mut phases = config.phases as i32;
-                ui.label(format!("{} (m)", t(&lang, "phases")));
-                let response = ui.add(egui::Slider::new(
-                    &mut phases,
-                    (MotorConfig::MIN.phases as i32)..=(MotorConfig::MAX.phases as i32),
-                ));
-                if response.changed() {
-                    config.phases = phases as usize;
-                    clamp_config(&mut config);
-                }
-                geometry_changed |= slider_settled(&response);
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing.x = 8.0;
-                    for i in 0..config.phases {
-                        let egui_color = phase::colors::phase_color_egui(i, config.phases);
-                        let letter = phase::letter::phase_letter(i);
-
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 4.0;
-                            let (rect, response) = ui
-                                .allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                            ui.painter().rect_filled(rect, 2.0, egui_color);
-
-                            let phase_name =
-                                format!("{} {} ({})", t(&lang, "phase"), i + 1, letter);
-                            response.on_hover_text(&phase_name);
-
-                            ui.label(letter.to_string()).on_hover_text(&phase_name);
-                        });
-                    }
-                });
-                ui.add_space(4.0);
-
-                // Poles
-                let mut poles = (config.pole_pairs * 2) as i32;
-                ui.label(format!("{}(P)", t(&lang, "poles")));
-                let response = ui.add(
-                    egui::Slider::new(
-                        &mut poles,
-                        (MotorConfig::MIN.pole_pairs as i32 * 2)
-                            ..=(MotorConfig::MAX.pole_pairs as i32 * 2),
-                    )
-                    .step_by(2.0),
-                );
-                if response.changed() {
-                    config.pole_pairs = (poles / 2) as usize;
-                    clamp_config(&mut config);
-                }
-                geometry_changed |= slider_settled(&response);
-                ui.add_space(4.0);
-
-                // Layers — conductors per slot, packed two per row
-                let mut layers = config.layers as i32;
-                let packing = crate::winding::SlotPacking::new(config.layers);
-                ui.label(format!(
-                    "{} ({}×{})",
-                    t(&lang, "layers"),
-                    packing.cols,
-                    packing.rows
-                ));
-                let response = ui.add(egui::Slider::new(
-                    &mut layers,
-                    (MotorConfig::MIN.layers as i32)..=(MotorConfig::MAX.layers as i32),
-                ));
-                if response.changed() {
-                    config.layers = layers as usize;
-                }
-                geometry_changed |= slider_settled(&response);
-                ui.add_space(4.0);
-
-                // Short-pitched — only meaningful with two electrical layers.
-                // The setting is kept, not cleared, so toggling layers back on
-                // restores it; it simply has no effect meanwhile.
-                let can_chord = crate::winding::can_short_pitch(&config);
-                geometry_changed |= ui
-                    .add_enabled_ui(can_chord, |ui| {
-                        ui.checkbox(&mut config.short_pitched, t(&lang, "short_pitched"))
-                    })
-                    .inner
-                    .on_disabled_hover_text(t(&lang, "short_pitched_needs_layers"))
-                    .changed();
+                Spacing::Sm.show(ui);
+                Separator::horizontal().show(ui);
+                Spacing::Sm.show(ui);
 
                 // The remaining controls only change what is drawn, never the
                 // shape of the machine.
-                visibility_changed |= crate::winding::ui::winding_ui(ui, &mut config, &lang);
-                visibility_changed |= crate::mmf_field::ui::mmf_ui(ui, &mut config, &lang);
-                visibility_changed |= crate::rotor::ui::rotor_ui(ui, &mut config, &lang);
-                visibility_changed |=
-                    crate::winding_scheme::ui::winding_scheme_ui(ui, &mut config, &lang);
-                visibility_changed |= ui
-                    .checkbox(&mut config.show_vectors, t(&lang, "show_vectors"))
-                    .changed();
+                visibility_changed |= crate::winding::ui::winding_ui(ui, &mut config);
+                visibility_changed |= crate::mmf_field::ui::mmf_ui(ui, &mut config);
+                visibility_changed |= crate::rotor::ui::rotor_ui(ui, &mut config);
+                visibility_changed |= crate::winding_scheme::ui::winding_scheme_ui(ui, &mut config);
+                visibility_changed |= toggle_row(
+                    ui,
+                    &mut config.show_vectors,
+                    &t!(Strings::ShowVectors),
+                    None,
+                );
 
-                ui.add_space(12.0);
-                ui.separator();
-                ui.add_space(8.0);
+                Spacing::Md.show(ui);
+                readout(ui, &config);
 
-                // Info panel
-                let n = config.groove_count;
-                let m = config.phases;
-                let p = config.pole_pairs;
-                let valid = m > 0 && p > 0 && n >= 2 * p * m && n.is_multiple_of(2 * p * m);
-
-                if valid {
-                    let q = n / (2 * p * m);
-                    let slots_per_pole = n / (2 * p);
-
-                    let q_str = format!("{} (q=S/(m.P)): {}", t(&lang, "distribution_index"), q);
-                    let spp_str = format!("{}: {}", t(&lang, "slots_per_pole"), slots_per_pole);
-                    let poles_str = format!("{}: {}", t(&lang, "total_poles"), 2 * p);
-
-                    let alpha = crate::winding::axis::slot_angle_elec(&config).to_degrees();
-                    let alpha_str =
-                        format!("{} (α=P/2.360/S): {:.2}°", t(&lang, "slot_angle"), alpha);
-
-                    let alpha_m = crate::winding::axis::phase_displacement(m).to_degrees();
-                    let alpha_m_label = if !m.is_multiple_of(2) {
-                        "(α.m=360/m)"
-                    } else {
-                        "(α.m=180/m)"
-                    };
-                    let alpha_m_str = format!(
-                        "{} {}: {:.2}°",
-                        t(&lang, "phase_angle"),
-                        alpha_m_label,
-                        alpha_m
-                    );
-
-                    ui.label(q_str);
-                    ui.label(spp_str);
-                    ui.label(poles_str);
-                    ui.label(alpha_str);
-                    ui.label(alpha_m_str);
-
-                    winding_factor_labels(ui, &config, &lang);
-
-                    ui.colored_label(egui::Color32::GREEN, t(&lang, "valid_config"));
-                } else {
-                    ui.colored_label(egui::Color32::YELLOW, t(&lang, "invalid_config"));
-                }
-
-                ui.add_space(12.0);
-                ui.separator();
-                ui.add_space(4.0);
-                ui.label(t(&lang, "rotate_hint"));
-                ui.label(t(&lang, "zoom_hint"));
+                Spacing::Md.show(ui);
+                hints(ui);
             });
     }
 
@@ -355,15 +322,246 @@ fn ui_panel(
     }
 }
 
-/// Whether a slider's value should be pushed to the scene this frame.
-///
-/// A regeneration rebuilds hundreds of meshes, and `changed()` fires on nearly
-/// every frame of a drag, so a drag commits once on release. Clicks on the
-/// track, arrow keys and typed values are not drags and commit immediately.
-/// The value itself is always applied straight away, so the readouts in the
-/// panel still follow the handle live.
-fn slider_settled(response: &egui::Response) -> bool {
-    response.drag_stopped() || (response.changed() && !response.dragged())
+fn language_selector(ui: &mut egui::Ui) {
+    let theme = ShadcnTheme::get(ui.ctx());
+    let current = i18n::current_language();
+    let tags: Vec<&str> = i18n::OFFERED.iter().copied().map(i18n::short_tag).collect();
+    let selected = i18n::OFFERED.iter().position(|&lang| lang == current);
+
+    ui.horizontal(|ui| {
+        Icon::new(ICON_LANGUAGE)
+            .size(16.0)
+            .color(theme.muted_foreground)
+            .show(ui)
+            .on_hover_text(t!(Strings::Language));
+
+        if let Some(picked) = ButtonGroup::new(&tags)
+            .selected(selected)
+            .variant(ButtonGroupVariant::Outline)
+            .size(Size::Sm)
+            .show(ui)
+        {
+            i18n::set_language(i18n::OFFERED[picked]);
+        }
+    });
+}
+
+/// The controls that change the shape of the machine. Returns whether anything
+/// settled on a new value this frame.
+fn machine_controls(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
+    let mut settled = false;
+
+    // Groove count
+    slider_caption(
+        ui,
+        &format!("{} (S): {}", t!(Strings::Grooves), config.groove_count),
+    );
+    let mut grooves = config.groove_count;
+    let edit = int_slider(
+        ui,
+        &mut grooves,
+        MotorConfig::MIN.groove_count,
+        MotorConfig::MAX.groove_count,
+        1,
+    );
+    if edit.changed {
+        config.groove_count = grooves;
+        clamp_config(config);
+    }
+    settled |= edit.settled;
+    Spacing::Xs.show(ui);
+
+    // Phases
+    slider_caption(
+        ui,
+        &format!("{} (m): {}", t!(Strings::Phases), config.phases),
+    );
+    let mut phases = config.phases;
+    let edit = int_slider(
+        ui,
+        &mut phases,
+        MotorConfig::MIN.phases,
+        MotorConfig::MAX.phases,
+        1,
+    );
+    if edit.changed {
+        config.phases = phases;
+        clamp_config(config);
+    }
+    settled |= edit.settled;
+    phase_legend(ui, config);
+    Spacing::Xs.show(ui);
+
+    // Poles — always even, so the slider steps in pole pairs.
+    slider_caption(
+        ui,
+        &format!("{} (P): {}", t!(Strings::Poles), config.pole_pairs * 2),
+    );
+    let mut poles = config.pole_pairs * 2;
+    let edit = int_slider(
+        ui,
+        &mut poles,
+        MotorConfig::MIN.pole_pairs * 2,
+        MotorConfig::MAX.pole_pairs * 2,
+        2,
+    );
+    if edit.changed {
+        config.pole_pairs = poles / 2;
+        clamp_config(config);
+    }
+    settled |= edit.settled;
+    Spacing::Xs.show(ui);
+
+    // Layers — conductors per slot, packed two per row
+    let packing = crate::winding::SlotPacking::new(config.layers);
+    slider_caption(
+        ui,
+        &format!(
+            "{} ({}×{}): {}",
+            t!(Strings::Layers),
+            packing.cols,
+            packing.rows,
+            config.layers
+        ),
+    );
+    let mut layers = config.layers;
+    let edit = int_slider(
+        ui,
+        &mut layers,
+        MotorConfig::MIN.layers,
+        MotorConfig::MAX.layers,
+        1,
+    );
+    if edit.changed {
+        config.layers = layers;
+    }
+    settled |= edit.settled;
+    Spacing::Sm.show(ui);
+
+    // Short-pitched — only meaningful with two electrical layers. The setting
+    // is kept, not cleared, so toggling layers back on restores it; it simply
+    // has no effect meanwhile.
+    let can_chord = crate::winding::can_short_pitch(config);
+    let label = t!(Strings::ShortPitched);
+    let chord = |ui: &mut egui::Ui, config: &mut MotorConfig| {
+        Checkbox::new(&mut config.short_pitched)
+            .label(&label)
+            .enabled(can_chord)
+            .show(ui)
+    };
+    settled |= if can_chord {
+        chord(ui, config).clicked()
+    } else {
+        // Disabled, so it can only be hovered — which is exactly when the
+        // explanation is worth showing.
+        let hint = t!(Strings::ShortPitchedNeedsLayers);
+        Tooltip::new(&hint)
+            .wrap(ui, |ui| chord(ui, config))
+            .clicked()
+    };
+
+    settled
+}
+
+/// Colour chips for the phases of the current machine.
+fn phase_legend(ui: &mut egui::Ui, config: &MotorConfig) {
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        for i in 0..config.phases {
+            let color = phase::colors::phase_color_egui(i, config.phases);
+            let letter = phase::letter::phase_letter(i);
+            let name = format!("{} {} ({})", t!(Strings::Phase), i + 1, letter);
+
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                phase_swatch(ui, color, &name);
+                Tooltip::new(&name).wrap(ui, |ui| {
+                    ui.scope(|ui| small_text(ui, &letter.to_string())).response
+                });
+            });
+        }
+    });
+}
+
+/// Everything the panel reports rather than controls.
+fn readout(ui: &mut egui::Ui, config: &MotorConfig) {
+    let theme = ShadcnTheme::get(ui.ctx());
+
+    let n = config.groove_count;
+    let m = config.phases;
+    let p = config.pole_pairs;
+    let valid = m > 0 && p > 0 && n >= 2 * p * m && n.is_multiple_of(2 * p * m);
+
+    if !valid {
+        Alert::new(&t!(Strings::InvalidConfig))
+            .description(&t!(Strings::InvalidConfigHint))
+            .variant(AlertVariant::Warning)
+            .show(ui);
+        return;
+    }
+
+    let q = n / (2 * p * m);
+    let slots_per_pole = n / (2 * p);
+    let alpha = crate::winding::axis::slot_angle_elec(config).to_degrees();
+    let alpha_m = crate::winding::axis::phase_displacement(m).to_degrees();
+    let alpha_m_label = if m.is_multiple_of(2) {
+        "(α.m=180/m)"
+    } else {
+        "(α.m=360/m)"
+    };
+
+    Boxed::new()
+        .padding(Spacing::Sm)
+        .accent(true)
+        .show(ui, |ui| {
+            muted_text(
+                ui,
+                &format!("{} (q=S/(m.P)): {q}", t!(Strings::DistributionIndex)),
+            );
+            muted_text(
+                ui,
+                &format!("{}: {slots_per_pole}", t!(Strings::SlotsPerPole)),
+            );
+            muted_text(ui, &format!("{}: {}", t!(Strings::TotalPoles), 2 * p));
+            muted_text(
+                ui,
+                &format!("{} (α=P/2.360/S): {alpha:.2}°", t!(Strings::SlotAngle)),
+            );
+            muted_text(
+                ui,
+                &format!("{} {alpha_m_label}: {alpha_m:.2}°", t!(Strings::PhaseAngle)),
+            );
+
+            winding_factor_labels(ui, config);
+
+            Spacing::Xs.show(ui);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                Icon::new(ICON_CHECK_CIRCLE)
+                    .size(14.0)
+                    .color(theme.success)
+                    .show(ui);
+                small_text(ui, &t!(Strings::ValidConfig));
+            });
+        });
+}
+
+/// Camera controls, as a footer.
+fn hints(ui: &mut egui::Ui) {
+    Separator::horizontal().show(ui);
+    Spacing::Xs.show(ui);
+    hint(ui, ICON_MOUSE, &t!(Strings::RotateHint));
+    hint(ui, ICON_ZOOM_IN, &t!(Strings::ZoomHint));
+}
+
+/// An icon and a line of small print, on one row.
+fn hint(ui: &mut egui::Ui, glyph: &'static str, text: &str) {
+    let color = ShadcnTheme::get(ui.ctx()).muted_foreground;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        Icon::new(glyph).size(14.0).color(color).show(ui);
+        small_text(ui, text);
+    });
 }
 
 /// Ensure groove_count stays divisible by 2 * pole_pairs * phases.
