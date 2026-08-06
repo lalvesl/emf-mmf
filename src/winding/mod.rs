@@ -338,6 +338,7 @@ pub fn can_short_pitch(config: &MotorConfig) -> bool {
 /// Data parameters for winding rendering, reducing argument counts for clippy.
 pub struct WindingData<'a> {
     pub config: &'a MotorConfig,
+    pub view: &'a ViewConfig,
     pub conductors: &'a [Conductor],
     pub layout: SlotLayout,
     pub segment_angle: f32,
@@ -361,7 +362,7 @@ impl WindingData<'_> {
     /// takes over — the two butt together into one continuous wire.
     #[inline]
     pub fn conductor_height(&self) -> f32 {
-        if self.config.show_endwindings {
+        if self.view.show_endwindings {
             STATOR_HEIGHT
         } else {
             STATOR_HEIGHT * 0.95
@@ -389,15 +390,11 @@ impl WindingData<'_> {
 pub fn regenerate_winding(
     mut commands: Commands,
     config: Res<MotorConfig>,
-    mut ev_config: MessageReader<MotorConfigChanged>,
+    view: Res<ViewConfig>,
     query: Query<Entity, With<WindingPart>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if ev_config.read().next().is_none() {
-        return;
-    }
-
     // Despawn old winding geometry
     for entity in &query {
         commands.entity(entity).despawn();
@@ -419,6 +416,7 @@ pub fn regenerate_winding(
 
     let data = WindingData {
         config: &config,
+        view: &view,
         conductors: &conductors,
         layout,
         segment_angle,
@@ -702,10 +700,22 @@ mod tests {
         assert_eq!(starting, cfg.groove_count / 2);
     }
 
-    fn winding_data<'a>(config: &'a MotorConfig, conductors: &'a [Conductor]) -> WindingData<'a> {
+    fn shown_endwindings(show: bool) -> ViewConfig {
+        ViewConfig {
+            show_endwindings: show,
+            ..default()
+        }
+    }
+
+    fn winding_data<'a>(
+        config: &'a MotorConfig,
+        view: &'a ViewConfig,
+        conductors: &'a [Conductor],
+    ) -> WindingData<'a> {
         let segment_angle = TAU / config.groove_count as f32;
         WindingData {
             config,
+            view,
             conductors,
             layout: SlotLayout::new(
                 config.layers,
@@ -726,11 +736,11 @@ mod tests {
     #[test]
     fn endwindings_meet_the_conductors_at_the_core_face() {
         for count in [1_usize, 2, 4, 6] {
-            let mut cfg = config(24, 3, 2, count);
-            cfg.show_endwindings = true;
+            let cfg = config(24, 3, 2, count);
+            let view = shown_endwindings(true);
             let assignments = compute_winding(&cfg);
             let conductors = compute_conductors(&cfg, &assignments);
-            let data = winding_data(&cfg, &conductors);
+            let data = winding_data(&cfg, &view, &conductors);
 
             let conductor_tip = data.conductor_height() / 2.0;
             let lead_bottom = data.endwinding_y() - data.endwinding_lead();
@@ -752,11 +762,11 @@ mod tests {
     fn the_arc_starts_above_the_core_face() {
         for n in [12_usize, 24, 144] {
             for count in [1_usize, 2, 4, 6] {
-                let mut cfg = config(n, 3, 2, count);
-                cfg.show_endwindings = true;
+                let cfg = config(n, 3, 2, count);
+                let view = shown_endwindings(true);
                 let assignments = compute_winding(&cfg);
                 let conductors = compute_conductors(&cfg, &assignments);
-                let data = winding_data(&cfg, &conductors);
+                let data = winding_data(&cfg, &view, &conductors);
 
                 // Underside of the tube where the arc begins, worst case: the
                 // tube is still horizontal there.
@@ -773,11 +783,11 @@ mod tests {
     /// current-direction symbols on its end faces stay readable.
     #[test]
     fn hidden_endwindings_keep_the_conductor_inside_the_core() {
-        let mut cfg = config(24, 3, 2, 4);
-        cfg.show_endwindings = false;
+        let cfg = config(24, 3, 2, 4);
+        let view = shown_endwindings(false);
         let assignments = compute_winding(&cfg);
         let conductors = compute_conductors(&cfg, &assignments);
-        let data = winding_data(&cfg, &conductors);
+        let data = winding_data(&cfg, &view, &conductors);
 
         assert!(data.conductor_height() / 2.0 < data.half_h);
     }
