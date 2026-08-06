@@ -100,7 +100,8 @@ fn sector_color(base_color: [f32; 4], amplitude: f32, bell: f32, radial: f32) ->
         blend(base_color[0], polarity[0]),
         blend(base_color[1], polarity[1]),
         blend(base_color[2], polarity[2]),
-        amplitude.abs() * bell,
+        // small improvement to make colol with derivate more in low values and more quick in high values
+        amplitude.abs().powf(2.0) * bell,
     ]
 }
 
@@ -628,6 +629,8 @@ fn recolor_sector_mesh(
     base_color: [f32; 4],
 ) {
     let mut colors: Vec<[f32; 4]> = Vec::new();
+    // Small improvement to make more visiable the poles such as the phases
+    let base_color: [f32; 4] = [base_color[0], base_color[1], base_color[2], 0.5];
     for_each_sector_vertex(axis_angle, half_span, segments, |a, radial| {
         let bell = lobe_bell(a, axis_angle, half_span, gradient_intensity);
         colors.push(sector_color(base_color, amplitude, bell, radial));
