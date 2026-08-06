@@ -191,7 +191,7 @@ pub fn render_header_coils(
     data: &super::WindingData,
     phase_mats: &[Handle<StandardMaterial>],
 ) {
-    if !data.config.show_endwindings {
+    if !data.view.show_endwindings {
         return;
     }
 
