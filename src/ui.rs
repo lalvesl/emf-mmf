@@ -159,15 +159,25 @@ pub fn slider_caption(ui: &mut egui::Ui, text: &str) {
     muted_text(ui, text);
 }
 
+/// Side of a colour chip, in points.
+const CHIP_SIZE: f32 = 12.0;
+
+/// A colour chip: a small rounded square, cornered off the theme's own radius.
+///
+/// `Sense::hover`, never `click`: a click-sensing widget inside a `Toggle`'s
+/// content eats the click that would otherwise flip the toggle.
+pub fn color_chip(ui: &mut egui::Ui, color: egui::Color32) -> egui::Response {
+    let radius = ShadcnTheme::get(ui.ctx()).radius * 0.5;
+    let (rect, response) =
+        ui.allocate_exact_size(egui::Vec2::splat(CHIP_SIZE), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(rect, egui::CornerRadius::same(radius as u8), color);
+    response
+}
+
 /// A phase's colour chip, with the phase name on hover.
 pub fn phase_swatch(ui: &mut egui::Ui, color: egui::Color32, hover: &str) -> egui::Response {
-    let radius = ShadcnTheme::get(ui.ctx()).radius * 0.5;
-    Tooltip::new(hover).wrap(ui, |ui| {
-        let (rect, response) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-        ui.painter()
-            .rect_filled(rect, egui::CornerRadius::same(radius as u8), color);
-        response
-    })
+    Tooltip::new(hover).wrap(ui, |ui| color_chip(ui, color))
 }
 
 /// A visibility toggle: label, optional tooltip, and whether it flipped.
