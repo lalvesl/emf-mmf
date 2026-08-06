@@ -9,7 +9,7 @@ pub fn render_current_directions(
     data: &super::WindingData,
     phase_mats_opp: &[Handle<StandardMaterial>],
 ) {
-    if data.config.show_endwindings {
+    if data.view.show_endwindings {
         return;
     }
 
