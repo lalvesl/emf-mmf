@@ -29,14 +29,22 @@ pub const POLARITY_HUES: [f32; 2] = [0.0, 240.0];
 /// phase letter shown in the legend and the winding diagram is what carries
 /// identity where colour alone falls short.
 const PHASE_PALETTE: [(u8, u8, u8); MAX_PHASES] = [
-    (27, 167, 132), // teal
-    (178, 98, 218), // violet
-    (193, 121, 21), // amber
-    (25, 138, 179), // cyan
-    (113, 156, 28), // lime
-    (212, 84, 180), // magenta
-    (169, 147, 4),  // gold
-    (33, 131, 49),  // green
+    // (27, 167, 132), // teal
+    // (178, 98, 218), // violet
+    // (193, 121, 21), // amber
+    // (25, 138, 179), // cyan
+    // (113, 156, 28), // lime
+    // (212, 84, 180), // magenta
+    // (169, 147, 4),  // gold
+    // (33, 131, 49),  // green
+    (255, 99, 72),  // Vivid Coral
+    (255, 184, 0),  // Vibrant Amber
+    (34, 209, 134), // Emerald Spring Green
+    (0, 200, 222),  // Bright Turquoise
+    (168, 85, 247), // Neon Purple
+    (244, 63, 94),  // Electric Rose
+    (255, 140, 0),  // Fiery Orange
+    (0, 229, 255),  // Vivid Cyan
 ];
 
 /// Colour of `phase`, wrapping if the index runs past the phase count.
