@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use egui_sc::egui_components::{
     Button, ButtonSize, ButtonVariant, ICON_EXPAND_MORE, ICON_PAUSE, ICON_PLAY_ARROW, ICON_WAVES,
-    ShadcnTheme, Slider, Spacing, Tooltip, heading4, muted_text,
+    ShadcnTheme, Spacing, Tooltip, heading4, muted_text,
 };
 use i18n::t;
 
@@ -135,7 +135,7 @@ fn transport(ui: &mut egui::Ui, state: &mut ElectricalState) {
             ui,
             &format!("{}: {:.2} Hz", t!(Strings::Speed), state.speed),
         );
-        Slider::new(&mut state.speed, 0.05, 5.0).step(0.05).show(ui);
+        crate::ui::float_slider(ui, "speed", &mut state.speed, 0.05, 5.0, 0.05);
     });
 }
 
