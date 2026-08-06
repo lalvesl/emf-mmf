@@ -2,15 +2,15 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 use egui_sc::egui_components::{
     Alert, AlertVariant, Boxed, Button, ButtonGroup, ButtonGroupVariant, ButtonSize, ButtonVariant,
-    Checkbox, ICON_CHECK_CIRCLE, ICON_CHEVRON_LEFT, ICON_LANGUAGE, ICON_MOUSE, ICON_TUNE,
-    ICON_ZOOM_IN, Icon, Separator, ShadcnTheme, Size, Slider, Spacing, Switch, Tooltip, heading4,
-    muted_text, small_text,
+    ICON_CHECK_CIRCLE, ICON_CHEVRON_LEFT, ICON_LANGUAGE, ICON_MOUSE, ICON_TUNE, ICON_ZOOM_IN, Icon,
+    Separator, ShadcnTheme, Size, Slider, Spacing, Switch, Tooltip, heading4, muted_text,
+    small_text,
 };
 // Absolute path: `crate::i18n` below binds the name `i18n` in this module, and
 // the macro lives in the crate of the same name.
 use ::i18n::t;
 
-use crate::config::{MotorConfig, MotorConfigChanged};
+use crate::config::{MotorConfig, ViewConfig};
 use crate::i18n::{self, Strings};
 use crate::phase;
 
@@ -96,43 +96,60 @@ pub enum PanelLayout {
 
 // ─── Shared widget helpers ────────────────────────────────────────────────────
 
-/// What a [`Slider`] did this frame.
-///
-/// The component senses drags only and never marks its `Response` as changed,
-/// so both facts have to be derived here: `changed` by comparing the value, and
-/// `settled` from the end of the drag.
-pub struct SliderEdit {
-    /// The value moved this frame — apply it so readouts follow the handle.
-    pub changed: bool,
-    /// The drag ended — safe to commit something expensive.
-    pub settled: bool,
-}
-
 /// A slider over an integer parameter.
 ///
-/// Regenerating the scene rebuilds hundreds of meshes, so a drag commits once
-/// on release; the value itself is applied every frame regardless, which is
-/// what keeps the readout in the label honest.
+/// Two things the component cannot do on its own:
+///
+/// Its `.step()` re-snaps the bound `f32` on every frame of a drag, which
+/// throws away any pointer move worth less than one step. Five pole counts
+/// spread across the panel put one step at roughly 28 px, so nothing short of
+/// a flick moved the handle at all. The step is therefore applied here, on the
+/// way out, and the component is left to integrate the drag unrounded.
+///
+/// That unrounded position then has to survive between frames, so it is kept
+/// in egui memory rather than rebuilt from the integer — but only while a drag
+/// is in progress, so a value changed elsewhere (`clamp_config`, another
+/// control) still moves the handle.
 pub fn int_slider(
     ui: &mut egui::Ui,
+    salt: &str,
     value: &mut usize,
     min: usize,
     max: usize,
     step: usize,
-) -> SliderEdit {
-    let mut raw = *value as f32;
-    let response = Slider::new(&mut raw, min as f32, max as f32)
-        .step(step.max(1) as f32)
-        .show(ui);
+) {
+    let step = step.max(1);
+    let mut float = *value as f32;
+    float_slider(ui, salt, &mut float, min as f32, max as f32, step as f32);
+    *value = (float.round() as usize).clamp(min, max);
+}
 
-    let stepped = (raw.round() as usize).clamp(min, max);
-    let changed = stepped != *value;
-    *value = stepped;
+/// A slider that keeps its position between frames, snapped to `step` on the
+/// way out. See [`int_slider`] for why the component's own `.step()` is not
+/// used.
+pub fn float_slider(
+    ui: &mut egui::Ui,
+    salt: &str,
+    value: &mut f32,
+    min: f32,
+    max: f32,
+    step: f32,
+) -> egui::Response {
+    let id = ui.make_persistent_id(salt);
+    let mut raw = ui
+        .data(|d| d.get_temp::<f32>(id))
+        .unwrap_or(*value)
+        .clamp(min, max);
 
-    SliderEdit {
-        changed,
-        settled: response.drag_stopped(),
+    let response = Slider::new(&mut raw, min, max).show(ui);
+
+    if !response.dragged() {
+        raw = *value;
     }
+    ui.data_mut(|d| d.insert_temp(id, raw));
+
+    *value = ((raw / step).round() * step).clamp(min, max);
+    response
 }
 
 /// A labelled row that carries a value, above the control it belongs to.
@@ -222,9 +239,8 @@ fn reset_panel_space(mut contexts: EguiContexts, mut space: ResMut<PanelSpace>) 
 fn ui_panel(
     mut contexts: EguiContexts,
     mut config: ResMut<MotorConfig>,
-    mut ev_writer: MessageWriter<MotorConfigChanged>,
+    mut view: ResMut<ViewConfig>,
     mut space: ResMut<PanelSpace>,
-    mut first_frame: Local<bool>,
     mut minimized: Local<bool>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else {
@@ -233,14 +249,12 @@ fn ui_panel(
 
     let mut viewport_ui = space.ui(ctx, "ui_panel_viewport");
 
-    let mut geometry_changed = false;
-    let mut visibility_changed = false;
-
-    // Trigger initial build
-    if !*first_frame {
-        geometry_changed = true;
-        *first_frame = true;
-    }
+    // The panel edits copies and writes them back through `set_if_neq`.
+    // Handing the resources to the widgets directly would mean a mutable
+    // deref every frame, and Bevy takes that as a change whether or not
+    // anything moved — so every regeneration system would run continuously.
+    let mut next_config = config.clone();
+    let mut next_view = view.clone();
 
     if *minimized {
         egui::Area::new(egui::Id::new("maximize_panel_area"))
@@ -284,7 +298,7 @@ fn ui_panel(
                 Separator::horizontal().show(ui);
                 Spacing::Sm.show(ui);
 
-                geometry_changed |= machine_controls(ui, &mut config);
+                machine_controls(ui, &mut next_config);
 
                 Spacing::Sm.show(ui);
                 Separator::horizontal().show(ui);
@@ -292,19 +306,19 @@ fn ui_panel(
 
                 // The remaining controls only change what is drawn, never the
                 // shape of the machine.
-                visibility_changed |= crate::winding::ui::winding_ui(ui, &mut config);
-                visibility_changed |= crate::mmf_field::ui::mmf_ui(ui, &mut config);
-                visibility_changed |= crate::rotor::ui::rotor_ui(ui, &mut config);
-                visibility_changed |= crate::winding_scheme::ui::winding_scheme_ui(ui, &mut config);
-                visibility_changed |= toggle_row(
+                crate::winding::ui::winding_ui(ui, &mut next_view);
+                crate::mmf_field::ui::mmf_ui(ui, &next_config, &mut next_view);
+                crate::rotor::ui::rotor_ui(ui, &mut next_view);
+                crate::winding_scheme::ui::winding_scheme_ui(ui, &mut next_view);
+                toggle_row(
                     ui,
-                    &mut config.show_vectors,
+                    &mut next_view.show_vectors,
                     &t!(Strings::ShowVectors),
                     None,
                 );
 
                 Spacing::Md.show(ui);
-                readout(ui, &config);
+                readout(ui, &next_config);
 
                 Spacing::Md.show(ui);
                 hints(ui);
@@ -315,11 +329,11 @@ fn ui_panel(
     // so the untouched `viewport_ui` correctly reports the whole viewport.
     space.claim(&viewport_ui);
 
-    if geometry_changed {
-        ev_writer.write(MotorConfigChanged::GEOMETRY);
-    } else if visibility_changed {
-        ev_writer.write(MotorConfigChanged::VISIBILITY);
-    }
+    // The only writes in the whole panel, and the only thing that makes the
+    // scene rebuild. A slider dragged across several values fires once per
+    // value, so the motor follows the handle live.
+    config.set_if_neq(next_config);
+    view.set_if_neq(next_view);
 }
 
 fn language_selector(ui: &mut egui::Ui) {
@@ -348,27 +362,21 @@ fn language_selector(ui: &mut egui::Ui) {
 
 /// The controls that change the shape of the machine. Returns whether anything
 /// settled on a new value this frame.
-fn machine_controls(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
-    let mut settled = false;
-
+fn machine_controls(ui: &mut egui::Ui, config: &mut MotorConfig) {
     // Groove count
     slider_caption(
         ui,
         &format!("{} (S): {}", t!(Strings::Grooves), config.groove_count),
     );
-    let mut grooves = config.groove_count;
-    let edit = int_slider(
+    int_slider(
         ui,
-        &mut grooves,
+        "grooves",
+        &mut config.groove_count,
         MotorConfig::MIN.groove_count,
         MotorConfig::MAX.groove_count,
         1,
     );
-    if edit.changed {
-        config.groove_count = grooves;
-        clamp_config(config);
-    }
-    settled |= edit.settled;
+    clamp_config(config);
     Spacing::Xs.show(ui);
 
     // Phases
@@ -376,19 +384,15 @@ fn machine_controls(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
         ui,
         &format!("{} (m): {}", t!(Strings::Phases), config.phases),
     );
-    let mut phases = config.phases;
-    let edit = int_slider(
+    int_slider(
         ui,
-        &mut phases,
+        "phases",
+        &mut config.phases,
         MotorConfig::MIN.phases,
         MotorConfig::MAX.phases,
         1,
     );
-    if edit.changed {
-        config.phases = phases;
-        clamp_config(config);
-    }
-    settled |= edit.settled;
+    clamp_config(config);
     phase_legend(ui, config);
     Spacing::Xs.show(ui);
 
@@ -398,18 +402,16 @@ fn machine_controls(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
         &format!("{} (P): {}", t!(Strings::Poles), config.pole_pairs * 2),
     );
     let mut poles = config.pole_pairs * 2;
-    let edit = int_slider(
+    int_slider(
         ui,
+        "poles",
         &mut poles,
         MotorConfig::MIN.pole_pairs * 2,
         MotorConfig::MAX.pole_pairs * 2,
         2,
     );
-    if edit.changed {
-        config.pole_pairs = poles / 2;
-        clamp_config(config);
-    }
-    settled |= edit.settled;
+    config.pole_pairs = poles / 2;
+    clamp_config(config);
     Spacing::Xs.show(ui);
 
     // Layers — conductors per slot, packed two per row
@@ -424,18 +426,14 @@ fn machine_controls(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
             config.layers
         ),
     );
-    let mut layers = config.layers;
-    let edit = int_slider(
+    int_slider(
         ui,
-        &mut layers,
+        "layers",
+        &mut config.layers,
         MotorConfig::MIN.layers,
         MotorConfig::MAX.layers,
         1,
     );
-    if edit.changed {
-        config.layers = layers;
-    }
-    settled |= edit.settled;
     Spacing::Sm.show(ui);
 
     // Short-pitched — only meaningful with two electrical layers. The setting
@@ -444,23 +442,19 @@ fn machine_controls(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
     let can_chord = crate::winding::can_short_pitch(config);
     let label = t!(Strings::ShortPitched);
     let chord = |ui: &mut egui::Ui, config: &mut MotorConfig| {
-        Checkbox::new(&mut config.short_pitched)
+        Switch::new(&mut config.short_pitched)
             .label(&label)
             .enabled(can_chord)
             .show(ui)
     };
-    settled |= if can_chord {
-        chord(ui, config).clicked()
+    if can_chord {
+        chord(ui, config);
     } else {
         // Disabled, so it can only be hovered — which is exactly when the
         // explanation is worth showing.
         let hint = t!(Strings::ShortPitchedNeedsLayers);
-        Tooltip::new(&hint)
-            .wrap(ui, |ui| chord(ui, config))
-            .clicked()
-    };
-
-    settled
+        Tooltip::new(&hint).wrap(ui, |ui| chord(ui, config));
+    }
 }
 
 /// Colour chips for the phases of the current machine.
@@ -598,6 +592,81 @@ fn clamp_config(config: &mut MotorConfig) {
 mod tests {
     use super::*;
     use crate::config::{MAX_PHASES, MmfFieldConfig};
+
+    /// Drag the slider across `frames`, moving the pointer `dx` each frame, and
+    /// report where the bound value ended up.
+    fn drag_slider(
+        mut value: usize,
+        min: usize,
+        max: usize,
+        step: usize,
+        frames: usize,
+        dx: f32,
+    ) -> usize {
+        const WIDTH: f32 = 300.0;
+        const ROW_HEIGHT: f32 = 36.0;
+
+        let ctx = egui::Context::default();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(WIDTH, 200.0));
+        let mut pointer = egui::pos2(WIDTH * 0.5, ROW_HEIGHT * 0.5);
+
+        let run = |events: Vec<egui::Event>, value: &mut usize| {
+            let input = egui::RawInput {
+                screen_rect: Some(screen),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run_ui(input, |ui| {
+                int_slider(ui, "test", value, min, max, step);
+            });
+        };
+
+        // Lay the widget out once, then press on it.
+        run(vec![], &mut value);
+        run(
+            vec![egui::Event::PointerButton {
+                pos: pointer,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: Default::default(),
+            }],
+            &mut value,
+        );
+
+        for _ in 0..frames {
+            pointer.x += dx;
+            run(vec![egui::Event::PointerMoved(pointer)], &mut value);
+        }
+
+        value
+    }
+
+    /// Regression: the component re-snaps its `f32` to the step on every frame
+    /// of a drag, so a wrapper that rebuilt that float from the integer each
+    /// frame threw away every pointer move worth less than one step. With five
+    /// pole counts spread over the panel that is ~28 px, and the slider could
+    /// not be dragged at all — only flicked.
+    #[test]
+    fn a_slider_moves_under_drags_finer_than_its_step() {
+        let poles = drag_slider(2, 2, 12, 2, 12, 5.0);
+        assert!(
+            poles > 2,
+            "60 px of drag in 5 px steps left the value at {poles}"
+        );
+    }
+
+    /// The same accumulation must not overshoot: the value tracks the pointer
+    /// rather than running away from it.
+    #[test]
+    fn a_slider_tracks_the_pointer_rather_than_the_frame_count() {
+        let few = drag_slider(2, 2, 12, 2, 4, 5.0);
+        let many = drag_slider(2, 2, 12, 2, 20, 5.0);
+        assert!(
+            many > few,
+            "a longer drag should travel further: {few} then {many}"
+        );
+        assert!(many <= 12, "the value ran past its maximum: {many}");
+    }
 
     /// Every value reachable through the sliders must come out of
     /// `clamp_config` satisfying the divisibility rule and staying in range.
