@@ -36,7 +36,31 @@
           libxkbcommon
           udev
           alsa-lib
+          # egui_components' build script links `ureq` against native-tls to
+          # fetch the icon font. The fetch itself is skipped (see iconFont
+          # below), but the build dependency still has to link.
+          openssl
         ];
+
+        # Pre-fetched Material Icons, so egui_components/build.rs never reaches
+        # the network — which the Nix build sandbox forbids outright.
+        materialIconsFont = pkgs.fetchurl {
+          url = "https://github.com/google/material-design-icons/raw/master/font/MaterialIcons-Regular.ttf";
+          hash = "sha256-7xSfCL3S/wmk4shXNHa3sPP7sVtiOVSt5ZiZ5xdb7do=";
+        };
+
+        materialIconsCodepoints = pkgs.fetchurl {
+          url = "https://raw.githubusercontent.com/google/material-design-icons/master/font/MaterialIcons-Regular.codepoints";
+          hash = "sha256-Uw8lv3stccjh2pR21T+am7a34Ye/9pu3Eou2ebgZSJQ=";
+        };
+
+        # Inherited into every shell and package. Without the codepoints the
+        # build script panics; without the font the icon family is a stub and
+        # the first component that paints an icon panics at runtime.
+        iconFont = {
+          EGUI_SHADCN_CODEPOINTS_PATH = "${materialIconsCodepoints}";
+          EGUI_SHADCN_FONT_PATH = "${materialIconsFont}";
+        };
 
         rustNightly = pkgs.rust-bin.nightly.latest.default.override {
           extensions = [
@@ -125,6 +149,8 @@
                 pkgs.dioxus-cli
               ];
 
+            inherit (iconFont) EGUI_SHADCN_CODEPOINTS_PATH EGUI_SHADCN_FONT_PATH;
+
             LD_LIBRARY_PATH = libPath;
             # CARGO_PROFILE_DEV_CODEGEN_BACKEND = "cranelift";
           };
@@ -141,6 +167,8 @@
                 rustStable
                 pkgs.dioxus-cli
               ];
+
+            inherit (iconFont) EGUI_SHADCN_CODEPOINTS_PATH EGUI_SHADCN_FONT_PATH;
 
             LD_LIBRARY_PATH = libPath;
             CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
@@ -159,6 +187,8 @@
                 pkgs.dioxus-cli
               ];
 
+            inherit (iconFont) EGUI_SHADCN_CODEPOINTS_PATH EGUI_SHADCN_FONT_PATH;
+
             LD_LIBRARY_PATH = libPath;
           };
         };
@@ -175,6 +205,8 @@
               pname = "emf-mmf-web";
               version = "0.1.0";
               src = ./.;
+
+              inherit (iconFont) EGUI_SHADCN_CODEPOINTS_PATH EGUI_SHADCN_FONT_PATH;
 
               cargoDeps = rustPlatform.importCargoLock {
                 lockFile = ./Cargo.lock;
@@ -223,6 +255,8 @@
               version = "0.1.0";
               src = ./.;
 
+              inherit (iconFont) EGUI_SHADCN_CODEPOINTS_PATH EGUI_SHADCN_FONT_PATH;
+
               cargoDeps = rustPlatform.importCargoLock {
                 lockFile = ./Cargo.lock;
               };
@@ -253,6 +287,8 @@
               pname = "emf-mmf-windows";
               version = "0.1.0";
               src = ./.;
+
+              inherit (iconFont) EGUI_SHADCN_CODEPOINTS_PATH EGUI_SHADCN_FONT_PATH;
 
               cargoDeps = rustPlatform.importCargoLock {
                 lockFile = ./Cargo.lock;
@@ -288,6 +324,8 @@
               pname = "emf-mmf-android";
               version = "0.1.0";
               src = ./.;
+
+              inherit (iconFont) EGUI_SHADCN_CODEPOINTS_PATH EGUI_SHADCN_FONT_PATH;
 
               cargoDeps = rustPlatform.importCargoLock {
                 lockFile = ./Cargo.lock;
@@ -410,6 +448,8 @@
             type = "app";
             program = "${pkgs.writeShellScriptBin "run-dev" ''
               export PATH="${rustStable}/bin:${pkgs.pkg-config}/bin:${pkgs.lld}/bin:$PATH"
+              export EGUI_SHADCN_CODEPOINTS_PATH="${materialIconsCodepoints}"
+              export EGUI_SHADCN_FONT_PATH="${materialIconsFont}"
               export BEVY_ASSET_ROOT="."
               export LD_LIBRARY_PATH="${libPath}:./target/debug:./target/debug/deps:./target/dx/emf-mmf/debug/linux/app:$LD_LIBRARY_PATH"
               ${pkgs.dioxus-cli}/bin/dx serve --features hotpatching
@@ -421,6 +461,8 @@
             program = "${pkgs.writeShellScriptBin "run-web" ''
               export PATH="${rustStable}/bin:${pkgs.pkg-config}/bin:${pkgs.lld}/bin:$PATH"
               export CARGO_PROFILE_DEV_CODEGEN_BACKEND="llvm"
+              export EGUI_SHADCN_CODEPOINTS_PATH="${materialIconsCodepoints}"
+              export EGUI_SHADCN_FONT_PATH="${materialIconsFont}"
               export BEVY_ASSET_ROOT="./src"
               export LD_LIBRARY_PATH="${libPath}:$LD_LIBRARY_PATH"
               ${pkgs.dioxus-cli}/bin/dx serve --platform web --features web
@@ -431,6 +473,8 @@
             type = "app";
             program = "${pkgs.writeShellScriptBin "build-web" ''
               export PATH="${rustStable}/bin:$PATH"
+              export EGUI_SHADCN_CODEPOINTS_PATH="${materialIconsCodepoints}"
+              export EGUI_SHADCN_FONT_PATH="${materialIconsFont}"
               export BEVY_ASSET_ROOT="."
               ${pkgs.dioxus-cli}/bin/dx build --platform web --release --features web
             ''}/bin/build-web";
@@ -440,6 +484,8 @@
             type = "app";
             program = "${pkgs.writeShellScriptBin "build-linux" ''
               export PATH="${rustStable}/bin:$PATH"
+              export EGUI_SHADCN_CODEPOINTS_PATH="${materialIconsCodepoints}"
+              export EGUI_SHADCN_FONT_PATH="${materialIconsFont}"
               export BEVY_ASSET_ROOT="."
               export LD_LIBRARY_PATH="${libPath}:$LD_LIBRARY_PATH"
               ${pkgs.dioxus-cli}/bin/dx build --release
@@ -450,6 +496,8 @@
             type = "app";
             program = "${pkgs.writeShellScriptBin "build-windows" ''
               export PATH="${rustStable}/bin:$PATH"
+              export EGUI_SHADCN_CODEPOINTS_PATH="${materialIconsCodepoints}"
+              export EGUI_SHADCN_FONT_PATH="${materialIconsFont}"
               export BEVY_ASSET_ROOT="."
               export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc"
               ${rustStable}/bin/cargo build --release --target x86_64-pc-windows-gnu
