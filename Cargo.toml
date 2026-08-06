@@ -4,11 +4,20 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = []
+default = ["lang-en", "lang-pt-br"]
 # Winding factors (k_d, k_p, k_w) and the harmonic spectrum of the winding
 # function. Demonstration material rather than everyday content, so it can be
 # built out with `--no-default-features` for a leaner tool.
 harmonics = []
+
+# Languages compiled into the binary. `traductions!` expands to one catalog per
+# language behind `#[cfg(feature = "lang-…")]`, and those `cfg`s are evaluated
+# against *this* crate — so a language has to be a feature here, not only on
+# `i18n`, or its catalog is silently dropped and every string renders blank.
+lang-en = ["i18n/lang-en", "egui_sc/lang-en"]
+lang-en-us = ["i18n/lang-en-us", "egui_sc/lang-en-us"]
+lang-pt = ["i18n/lang-pt", "egui_sc/lang-pt"]
+lang-pt-br = ["i18n/lang-pt-br", "egui_sc/lang-pt-br"]
 web = []
 dev = ["bevy/dynamic_linking"]
 test = ["dev"]
@@ -34,6 +43,17 @@ bevy = { version = "0.19.0", default-features = false, features = ["3d", "ui"] }
 #     "x11",
 # ] }
 bevy_egui = "0.41.1"
+
+# Shadcn-style component library for egui. Its `egui` must be the same 0.35 that
+# `bevy_egui` pulls in — otherwise every `&mut Ui` argument is a type error that
+# does not mention versions.
+#
+# Path dependency for now; moves to the git URL once it is published.
+egui_sc = { path = "../aaaaaaaaa/egui_shadcn/egui_sc", default-features = false }
+# `t!` and `traductions!` expand to absolute `::i18n::…` paths, so the crate
+# that invokes them needs `i18n` by name — the `egui_sc::i18n` re-export only
+# covers the runtime API.
+i18n = { path = "../aaaaaaaaa/egui_shadcn/i18n/i18n" }
 
 # [dev-dependencies]
 # bevy = { version = "0.19.0" }
