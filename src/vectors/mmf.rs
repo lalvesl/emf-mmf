@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::f32::consts::PI;
 
-use crate::config::{MotorConfig, MotorConfigChanged};
+use crate::config::{MotorConfig, ViewConfig};
 use crate::electrical::ElectricalState;
 use crate::winding::axis;
 
@@ -9,7 +9,13 @@ pub struct MmfVectorsPlugin;
 
 impl Plugin for MmfVectorsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (regenerate_vectors, animate_vectors));
+        app.add_systems(
+            Update,
+            (
+                regenerate_vectors.run_if(crate::config::scene_changed),
+                animate_vectors,
+            ),
+        );
     }
 }
 
@@ -108,22 +114,18 @@ fn resultant_vector(config: &MotorConfig, pole: usize, elec_angle: f32) -> Vec3 
 
 fn regenerate_vectors(
     mut commands: Commands,
-    mut ev_config: MessageReader<MotorConfigChanged>,
     config: Res<MotorConfig>,
+    view: Res<ViewConfig>,
     query: Query<Entity, With<MmfVector>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if ev_config.read().next().is_none() {
-        return;
-    }
-
     // Despawn old vectors
     for entity in &query {
         commands.entity(entity).despawn();
     }
 
-    if !config.show_vectors {
+    if !view.show_vectors {
         return;
     }
 
@@ -220,12 +222,13 @@ fn regenerate_vectors(
 
 fn animate_vectors(
     config: Res<MotorConfig>,
+    view: Res<ViewConfig>,
     state: Res<ElectricalState>,
     mut vectors: Query<(&MmfVector, &Children, &mut Transform)>,
     mut shafts: ShaftQuery,
     mut heads: HeadQuery,
 ) {
-    if !config.show_vectors {
+    if !view.show_vectors {
         return;
     }
 
