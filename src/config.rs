@@ -7,7 +7,7 @@ use bevy::prelude::*;
 /// three can drift apart. The palette is what fixes the value: each phase gets
 /// a hand-picked colour that has to stay clear of the two the field overlay
 /// reserves for magnetic polarity, and eight is as far as that stretches.
-pub const MAX_PHASES: usize = 8;
+pub const MAX_PHASES: usize = 6;
 
 #[derive(Resource, Clone, Debug)]
 pub struct MmfFieldConfig {

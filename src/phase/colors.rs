@@ -37,14 +37,20 @@ const PHASE_PALETTE: [(u8, u8, u8); MAX_PHASES] = [
     // (212, 84, 180), // magenta
     // (169, 147, 4),  // gold
     // (33, 131, 49),  // green
-    (255, 99, 72),  // Vivid Coral
-    (255, 184, 0),  // Vibrant Amber
-    (34, 209, 134), // Emerald Spring Green
-    (0, 200, 222),  // Bright Turquoise
-    (168, 85, 247), // Neon Purple
-    (244, 63, 94),  // Electric Rose
-    (255, 140, 0),  // Fiery Orange
-    (0, 229, 255),  // Vivid Cyan
+    // (255, 99, 72),  // Vivid Coral
+    // (255, 184, 0),  // Vibrant Amber
+    // (34, 209, 134), // Emerald Spring Green
+    // (0, 200, 222),  // Bright Turquoise
+    // (168, 85, 247), // Neon Purple
+    // (244, 63, 94),  // Electric Rose
+    // (255, 140, 0),  // Fiery Orange
+    // (0, 229, 255),  // Vivid Cyan
+    (16, 80, 50),   // Dark Forest Green: Deep, rich woodland green
+    (217, 119, 6),  // Deep Amber: Warm golden-orange tone
+    (107, 33, 168), // Royal Amethyst: Deep, vibrant purple
+    (14, 116, 144), // Deep Ocean Teal: Rich cyan-teal blend
+    (136, 19, 55),  // Crimson Wine: Deep maroon-burgundy tone
+    (194, 65, 12),  // Burnt Terracotta: Rich rust-orange hue
 ];
 
 /// Colour of `phase`, wrapping if the index runs past the phase count.
