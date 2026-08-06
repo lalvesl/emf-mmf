@@ -9,7 +9,7 @@ use bevy::prelude::*;
 /// reserves for magnetic polarity, and eight is as far as that stretches.
 pub const MAX_PHASES: usize = 6;
 
-#[derive(Resource, Clone, Debug)]
+#[derive(Resource, Clone, Debug, PartialEq)]
 pub struct MmfFieldConfig {
     pub show: bool,
     pub phases_to_show: [bool; MAX_PHASES],
@@ -57,8 +57,13 @@ impl MmfFieldConfig {
     };
 }
 
-/// Motor winding configuration — user-adjustable parameters.
-#[derive(Resource, Clone, Debug)]
+/// What the machine *is* — the parameters that decide its shape.
+///
+/// Kept apart from [`ViewConfig`] so Bevy's change detection can tell the two
+/// apart on its own. Rebuilding the stator core costs one mesh per tooth — up
+/// to 144 — and nothing about it depends on what is currently shown, so the
+/// stator watches this resource alone.
+#[derive(Resource, Clone, Debug, PartialEq)]
 pub struct MotorConfig {
     pub groove_count: usize,
     pub phases: usize,
@@ -68,11 +73,6 @@ pub struct MotorConfig {
     /// of the coil that started `coil_pitch` slots earlier.
     pub layers: usize,
     pub pole_pairs: usize,
-    pub show_endwindings: bool,
-    pub show_vectors: bool,
-    pub show_rotor: bool,
-    pub show_winding_scheme: bool,
-    pub mmf_field: MmfFieldConfig,
 }
 
 impl MotorConfig {
@@ -82,11 +82,6 @@ impl MotorConfig {
         short_pitched: false,
         layers: 1,
         pole_pairs: 1,
-        show_endwindings: false,
-        show_vectors: false,
-        show_rotor: false,
-        show_winding_scheme: false,
-        mmf_field: MmfFieldConfig::MIN,
     };
 
     pub const MAX: Self = Self {
@@ -95,31 +90,7 @@ impl MotorConfig {
         short_pitched: true,
         layers: 6,
         pole_pairs: 6,
-        show_endwindings: true,
-        show_vectors: true,
-        show_rotor: true,
-        show_winding_scheme: true,
-        mmf_field: MmfFieldConfig::MAX,
     };
-}
-
-/// Event triggered when motor configuration changes.
-#[derive(Message, Clone, Copy)]
-pub struct MotorConfigChanged {
-    /// `true` when the machine itself changed (slots, phases, poles, coil
-    /// pitch); `false` when only a visibility toggle moved.
-    ///
-    /// Rebuilding the stator core costs one mesh per tooth — up to 144 — and
-    /// nothing about it depends on what is currently shown, so it listens for
-    /// geometry changes only.
-    pub geometry: bool,
-}
-
-impl MotorConfigChanged {
-    /// The machine changed shape: everything must be rebuilt.
-    pub const GEOMETRY: Self = Self { geometry: true };
-    /// Only what is drawn changed: the stator core can be left alone.
-    pub const VISIBILITY: Self = Self { geometry: false };
 }
 
 impl Default for MotorConfig {
@@ -130,6 +101,24 @@ impl Default for MotorConfig {
             short_pitched: false,
             layers: 1,
             pole_pairs: 1,
+        }
+    }
+}
+
+/// What is drawn. Never changes the shape of the machine, only what of it is
+/// visible, so the stator is free to ignore it.
+#[derive(Resource, Clone, Debug, PartialEq)]
+pub struct ViewConfig {
+    pub show_endwindings: bool,
+    pub show_vectors: bool,
+    pub show_rotor: bool,
+    pub show_winding_scheme: bool,
+    pub mmf_field: MmfFieldConfig,
+}
+
+impl Default for ViewConfig {
+    fn default() -> Self {
+        Self {
             show_endwindings: true,
             show_vectors: true,
             show_rotor: true,
@@ -137,6 +126,15 @@ impl Default for MotorConfig {
             mmf_field: MmfFieldConfig::default(),
         }
     }
+}
+
+/// Run condition for everything that is rebuilt from the machine *or* from what
+/// is currently shown.
+///
+/// Bevy counts a resource as changed on the frame it is inserted, so this also
+/// fires the first build — nothing has to seed it by hand.
+pub fn scene_changed(config: Res<MotorConfig>, view: Res<ViewConfig>) -> bool {
+    config.is_changed() || view.is_changed()
 }
 
 // Geometry constants
