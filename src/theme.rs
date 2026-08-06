@@ -8,10 +8,12 @@ use crate::ui::PanelLayout;
 
 /// Primary accent hue, or `None` for the neutral zinc default.
 ///
-/// Left neutral on purpose. Phase colours and the red/blue of magnetic polarity
-/// are the only things in this application whose colour carries meaning, and a
-/// tinted accent on every slider and switch would compete with them for it.
-const PRIMARY_HUE: Option<f32> = None;
+/// 217° is the library's own blue preset, so the panel matches the component
+/// demo. It is close to the 240° the field overlay paints magnetic south with,
+/// but the two never share a surface: this tints panel chrome only — sliders,
+/// switches, the pressed state of a toggle — while polarity is painted in the
+/// 3D viewport and the winding diagram.
+const PRIMARY_HUE: Option<f32> = Some(217.0);
 
 /// The theme every panel reads from.
 ///
