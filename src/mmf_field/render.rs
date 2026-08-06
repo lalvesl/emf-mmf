@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
 use std::f32::consts::{PI, TAU};
 
-use crate::config::{MotorConfig, MotorConfigChanged, STATOR_BORE_RADIUS, STATOR_HEIGHT};
+use crate::config::{MotorConfig, STATOR_BORE_RADIUS, STATOR_HEIGHT, ViewConfig};
 use crate::electrical::ElectricalState;
 use crate::winding::axis::{magnetic_axis, phase_current, phase_displacement};
 
@@ -15,7 +15,14 @@ pub struct MmfFieldRenderPlugin;
 
 impl Plugin for MmfFieldRenderPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (regenerate_field, animate_field, animate_result));
+        app.add_systems(
+            Update,
+            (
+                regenerate_field.run_if(crate::config::scene_changed),
+                animate_field,
+                animate_result,
+            ),
+        );
     }
 }
 
@@ -176,17 +183,13 @@ fn angular_distance(a: f32, b: f32) -> f32 {
 
 fn regenerate_field(
     mut commands: Commands,
-    mut ev_config: MessageReader<MotorConfigChanged>,
     config: Res<MotorConfig>,
+    view: Res<ViewConfig>,
     phase_query: Query<Entity, With<MmfFieldSector>>,
     result_query: Query<Entity, With<MmfResultSector>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if ev_config.read().next().is_none() {
-        return;
-    }
-
     // Despawn old phase field meshes
     for entity in &phase_query {
         commands.entity(entity).despawn();
@@ -196,7 +199,7 @@ fn regenerate_field(
         commands.entity(entity).despawn();
     }
 
-    if !config.mmf_field.show {
+    if !view.mmf_field.show {
         return;
     }
 
@@ -215,12 +218,12 @@ fn regenerate_field(
     let y_top = STATOR_HEIGHT / 2.0 - 0.02; // slightly below stator ceiling
     let segments: u32 = 48;
 
-    let gradient_intensity = config.mmf_field.gradient_intensity;
+    let gradient_intensity = view.mmf_field.gradient_intensity;
 
     // ── Per-phase sector meshes ────────────────────────────────────────────
     for pole in 0..(2 * p) {
         for phase in 0..m {
-            if !config.mmf_field.shows_phase(phase) {
+            if !view.mmf_field.shows_phase(phase) {
                 continue;
             }
 
@@ -311,11 +314,12 @@ fn regenerate_field(
 
 fn animate_field(
     config: Res<MotorConfig>,
+    view: Res<ViewConfig>,
     state: Res<ElectricalState>,
     mut query: Query<(&MmfFieldSector, &Mesh3d, &mut Visibility)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    if !config.mmf_field.show {
+    if !view.mmf_field.show {
         for (_, _, mut vis) in &mut query {
             *vis = Visibility::Hidden;
         }
@@ -330,7 +334,7 @@ fn animate_field(
 
     let alpha_m = phase_displacement(m);
 
-    let gradient_intensity = config.mmf_field.gradient_intensity;
+    let gradient_intensity = view.mmf_field.gradient_intensity;
 
     for (sector, mesh3d, mut vis) in &mut query {
         // Guard against stale entities from a previous config
@@ -339,7 +343,7 @@ fn animate_field(
             continue;
         }
 
-        if !config.mmf_field.shows_phase(sector.phase) {
+        if !view.mmf_field.shows_phase(sector.phase) {
             *vis = Visibility::Hidden;
             continue;
         }
@@ -379,12 +383,13 @@ fn animate_field(
 /// phases so the alpha stays within [0, 1].
 fn animate_result(
     config: Res<MotorConfig>,
+    view: Res<ViewConfig>,
     state: Res<ElectricalState>,
     mut query: Query<(&MmfResultSector, &Mesh3d, &mut Visibility)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     for (sector, mesh3d, mut vis) in &mut query {
-        if !config.mmf_field.show || !config.mmf_field.show_result {
+        if !view.mmf_field.show || !view.mmf_field.show_result {
             *vis = Visibility::Hidden;
             continue;
         }
@@ -399,7 +404,7 @@ fn animate_result(
         *vis = Visibility::Visible;
 
         let alpha_m = phase_displacement(m);
-        let gradient_intensity = config.mmf_field.gradient_intensity;
+        let gradient_intensity = view.mmf_field.gradient_intensity;
         let half_span = sector.half_angular_span;
         let segments = sector.segments;
 
