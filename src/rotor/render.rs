@@ -1,4 +1,4 @@
-use crate::config::{MotorConfig, MotorConfigChanged, ROTOR_RADIUS, STATOR_HEIGHT};
+use crate::config::{MotorConfig, ROTOR_RADIUS, STATOR_HEIGHT, ViewConfig};
 use crate::electrical::ElectricalState;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::Indices;
@@ -10,7 +10,13 @@ pub struct RotorPlugin;
 
 impl Plugin for RotorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (regenerate_rotor, animate_rotor));
+        app.add_systems(
+            Update,
+            (
+                regenerate_rotor.run_if(crate::config::scene_changed),
+                animate_rotor,
+            ),
+        );
     }
 }
 
@@ -25,15 +31,11 @@ pub struct RotorPart;
 fn regenerate_rotor(
     mut commands: Commands,
     config: Res<MotorConfig>,
-    mut ev_config: MessageReader<MotorConfigChanged>,
+    view: Res<ViewConfig>,
     query: Query<Entity, With<RotorPart>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if ev_config.read().next().is_none() {
-        return;
-    }
-
     // Despawn old rotor. `RotorRoot` also carries `RotorPart`, and despawning
     // it recursively removes its children (which carry `RotorPart` too), so
     // `try_despawn` is used to skip entities already gone by the time this
@@ -42,7 +44,7 @@ fn regenerate_rotor(
         commands.entity(entity).try_despawn();
     }
 
-    if !config.show_rotor {
+    if !view.show_rotor {
         return;
     }
 
@@ -244,10 +246,11 @@ fn build_rotor_sector_mesh(
 
 fn animate_rotor(
     config: Res<MotorConfig>,
+    view: Res<ViewConfig>,
     state: Res<ElectricalState>,
     mut query: Query<&mut Transform, With<RotorRoot>>,
 ) {
-    if !config.show_rotor {
+    if !view.show_rotor {
         return;
     }
 
