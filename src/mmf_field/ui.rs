@@ -1,32 +1,31 @@
-use crate::config::{MAX_PHASES, MmfFieldConfig, MotorConfig};
+use crate::config::{MAX_PHASES, MmfFieldConfig, MotorConfig, ViewConfig};
 use crate::i18n::Strings;
 use crate::phase;
-use crate::ui::{phase_swatch, slider_caption, toggle_row};
+use crate::ui::{float_slider, phase_swatch, slider_caption, toggle_row};
 use bevy_egui::egui;
-use egui_sc::egui_components::{Checkbox, Size, Slider, Spacing, Tooltip, small_text};
+use egui_sc::egui_components::{Checkbox, Size, Spacing, Tooltip, small_text};
 use i18n::t;
 
-pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
-    let mut changed = false;
+pub fn mmf_ui(ui: &mut egui::Ui, config: &MotorConfig, view: &mut ViewConfig) {
     // Never address more phases than `phases_to_show` can hold.
     let rows = config.phases.min(MAX_PHASES);
 
+    // Switching the overlay on with nothing selected would show an empty
+    // scene, so the first time it comes on every phase comes with it.
     if toggle_row(
         ui,
-        &mut config.mmf_field.show,
+        &mut view.mmf_field.show,
         &t!(Strings::ShowMmfField),
         Some(&t!(Strings::ToggleMmfFieldHover)),
-    ) {
-        changed = true;
-        if config.mmf_field.show {
-            for shown in config.mmf_field.phases_to_show.iter_mut().take(rows) {
-                *shown = true;
-            }
+    ) && view.mmf_field.show
+    {
+        for shown in view.mmf_field.phases_to_show.iter_mut().take(rows) {
+            *shown = true;
         }
     }
 
-    if !config.mmf_field.show {
-        return changed;
+    if !view.mmf_field.show {
+        return;
     }
 
     for i in 0..rows {
@@ -36,10 +35,9 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
 
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            changed |= Checkbox::new(&mut config.mmf_field.phases_to_show[i])
+            Checkbox::new(&mut view.mmf_field.phases_to_show[i])
                 .size(Size::Sm)
-                .show(ui)
-                .clicked();
+                .show(ui);
             phase_swatch(ui, color, &name);
             Tooltip::new(&name).wrap(ui, |ui| {
                 ui.scope(|ui| small_text(ui, &letter.to_string())).response
@@ -53,10 +51,9 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
     let result_label = t!(Strings::MmfResult);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
-        changed |= Checkbox::new(&mut config.mmf_field.show_result)
+        Checkbox::new(&mut view.mmf_field.show_result)
             .size(Size::Sm)
-            .show(ui)
-            .clicked();
+            .show(ui);
         // White swatch to match the result mesh colour.
         phase_swatch(ui, egui::Color32::WHITE, &result_label);
         Tooltip::new(&result_label).wrap(ui, |ui| {
@@ -70,21 +67,18 @@ pub fn mmf_ui(ui: &mut egui::Ui, config: &mut MotorConfig) -> bool {
         &format!(
             "{}: {:.1}",
             t!(Strings::MmfGradientIntensity),
-            config.mmf_field.gradient_intensity
+            view.mmf_field.gradient_intensity
         ),
     );
 
-    let before = config.mmf_field.gradient_intensity;
     Tooltip::new(&t!(Strings::MmfGradientIntensityHover)).wrap(ui, |ui| {
-        Slider::new(
-            &mut config.mmf_field.gradient_intensity,
+        float_slider(
+            ui,
+            "mmf_gradient",
+            &mut view.mmf_field.gradient_intensity,
             MmfFieldConfig::MIN.gradient_intensity,
             MmfFieldConfig::MAX.gradient_intensity,
+            0.1,
         )
-        .step(0.1)
-        .show(ui)
     });
-    changed |= config.mmf_field.gradient_intensity != before;
-
-    changed
 }
