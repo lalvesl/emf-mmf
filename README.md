@@ -72,15 +72,22 @@ harmonic spectrum showing what short-pitching does to the 5th and 7th.
 | Feature | Default | What it adds |
 | :------------ | :-----: | :----------------------------------------------------------------- |
 | `harmonics`   | off     | Winding factors (`k_d`, `k_p`, `k_w`) and the harmonic spectrum panel |
+| `lang-pt-br`  | **on**  | Brazilian Portuguese UI strings                                      |
+| `lang-en`     | **on**  | English UI strings                                                   |
 | `web`         | off     | WebAssembly target adjustments                                       |
 | `dev`         | off     | `bevy/dynamic_linking`, for faster incremental links                 |
 | `hotpatching` | off     | `bevy/hotpatching`, so `dx serve` can re-register systems live       |
+
+`lang-pt` and `lang-en-us` also exist. A language is in the binary only when its
+feature is on, and only the ones that are on appear in the panel's selector.
 
 ## Tech Stack
 
 - **Rust**: Core language for performance and safety (edition 2024).
 - **Bevy 0.19**: ECS-based 3D game engine for rendering.
 - **bevy_egui 0.41**: For the configuration panels and 2D diagrams.
+- **[egui-shadcn](https://github.com/lalvesl/egui_shadcn)**: Shadcn-style egui
+  components and the compile-time translation catalogs.
 - **Nix Flakes**: Reproducible development and build environments.
 - **Dioxus CLI**: Used as a development tool for hot-patching and multi-platform builds.
 
@@ -139,8 +146,9 @@ They call `cargo` directly and do not need the Dioxus CLI:
 - `src/rotor/`: Rotor geometry, synchronised to the resultant MMF.
 - `src/winding_scheme/`: 2D winding diagram and MMF waveform window.
 - `src/phase/`: Phase colours and letters.
-- `src/ui.rs`: Main configuration panel (`bevy_egui`).
-- `src/i18n.rs`: PT-BR / EN string table.
+- `src/ui.rs`: Main configuration panel.
+- `src/theme.rs`: Shadcn theme and icon font for the egui layer.
+- `src/i18n.rs`: PT-BR / EN string catalogs.
 - `src/camera.rs`: Orbit camera controller for 3D exploration.
 - `flake.nix`: Nix configuration for development and build automation.
 
