@@ -5,7 +5,7 @@ use i18n::t;
 #[cfg(feature = "harmonics")]
 use std::f32::consts::{PI, TAU};
 
-use crate::config::MotorConfig;
+use crate::config::{MotorConfig, ViewConfig};
 use crate::electrical::ElectricalState;
 use crate::i18n::Strings;
 use crate::phase;
@@ -35,9 +35,10 @@ const WAVEFORM_SAMPLES: usize = 720;
 fn winding_scheme_window(
     mut contexts: EguiContexts,
     config: Res<MotorConfig>,
+    view: Res<ViewConfig>,
     state: Res<ElectricalState>,
 ) {
-    if !config.show_winding_scheme {
+    if !view.show_winding_scheme {
         return;
     }
 
