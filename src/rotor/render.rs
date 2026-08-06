@@ -94,7 +94,7 @@ fn regenerate_rotor(
 
             for i in 0..p_count {
                 let a_start = i as f32 * pole_angle;
-                let mat = if i % 2 == 0 {
+                let mat = if i % 2 == 1 {
                     north_mat.clone()
                 } else {
                     south_mat.clone()
@@ -252,9 +252,9 @@ fn animate_rotor(
     }
 
     let p = config.pole_pairs as f32;
-    if p == 0.0 {
-        return;
-    }
+    // if p == 0.0 {
+    //     return;
+    // }
 
     // --- Synchronization with MMF Vectors ---
     // The Peak of the Resultant MMF field rotates at state.angle / p.
