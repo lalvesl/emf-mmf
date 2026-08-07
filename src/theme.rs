@@ -1,7 +1,7 @@
 //! Shadcn theme and fonts for the egui layer.
 
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use egui_sc::egui_components::{ShadcnTheme, register_font};
 
 use crate::ui::PanelLayout;
@@ -26,6 +26,35 @@ impl Default for AppTheme {
     fn default() -> Self {
         Self(ShadcnTheme::build(true, PRIMARY_HUE))
     }
+}
+
+// ─── Plot surfaces ────────────────────────────────────────────────────────────
+//
+// The 2D plots sit on `ShadcnTheme::muted` rather than the window background,
+// so they read as their own surface. `border` is unusable on them: in the dark
+// theme it is *the very same colour* as `muted`, so a line drawn in it there is
+// invisible — which is how the electrical plot lost its zero line. These are
+// stepped alphas of `muted_foreground` instead, still theme-derived and ordered
+// by how much attention each mark deserves.
+
+/// Corner radius of a plot surface.
+pub fn plot_corner(theme: &ShadcnTheme) -> egui::CornerRadius {
+    egui::CornerRadius::same(theme.radius as u8)
+}
+
+/// The frame drawn around a plot area.
+pub fn outline_color(theme: &ShadcnTheme) -> egui::Color32 {
+    ShadcnTheme::with_alpha(theme.muted_foreground, 60)
+}
+
+/// The zero line and other axes a reader should notice but not read past.
+pub fn axis_color(theme: &ShadcnTheme) -> egui::Color32 {
+    ShadcnTheme::with_alpha(theme.muted_foreground, 90)
+}
+
+/// Reference gridlines — present, but never competing with the data.
+pub fn grid_color(theme: &ShadcnTheme) -> egui::Color32 {
+    ShadcnTheme::with_alpha(theme.muted_foreground, 40)
 }
 
 /// Whether the icon font is bound and the UI is safe to paint.
