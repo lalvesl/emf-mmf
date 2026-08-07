@@ -3,6 +3,7 @@ use std::f32::consts::PI;
 
 use crate::config::{MotorConfig, ViewConfig};
 use crate::electrical::ElectricalState;
+use crate::vectors::arrow::{self, ArrowHead, ArrowShaft, HeadQuery, ShaftQuery};
 use crate::winding::axis;
 
 pub struct MmfVectorsPlugin;
@@ -26,34 +27,8 @@ pub struct MmfVector {
     pub pole: usize,
 }
 
-/// The stem of an arrow. Stretched along Y to the vector's length.
-#[derive(Component)]
-struct ArrowShaft;
-
-/// The cone of an arrow. Moved to the tip, but kept at its built size.
-#[derive(Component)]
-struct ArrowHead {
-    height: f32,
-}
-
 const PHASE_HEAD_HEIGHT: f32 = 0.2;
 const RESULT_HEAD_HEIGHT: f32 = 0.3;
-
-/// Shafts, disjoint from the heads and from the arrows that own them.
-type ShaftQuery<'w, 's> = Query<
-    'w,
-    's,
-    &'static mut Transform,
-    (With<ArrowShaft>, Without<ArrowHead>, Without<MmfVector>),
->;
-
-/// Heads, disjoint from the shafts and from the arrows that own them.
-type HeadQuery<'w, 's> = Query<
-    'w,
-    's,
-    (&'static ArrowHead, &'static mut Transform),
-    (Without<ArrowShaft>, Without<MmfVector>),
->;
 
 /// Poles that get a resultant arrow: the north of each pole pair.
 ///
@@ -225,8 +200,8 @@ fn animate_vectors(
     view: Res<ViewConfig>,
     state: Res<ElectricalState>,
     mut vectors: Query<(&MmfVector, &Children, &mut Transform)>,
-    mut shafts: ShaftQuery,
-    mut heads: HeadQuery,
+    mut shafts: ShaftQuery<MmfVector>,
+    mut heads: HeadQuery<MmfVector>,
 ) {
     if !view.show_vectors {
         return;
@@ -282,27 +257,7 @@ fn animate_vectors(
 
         let world_length = (length * max_radius) / max_ideal.max(1.0);
 
-        // Lay the shaft and the head out along the arrow rather than scaling
-        // the whole thing in Y: that stretched the cone into a needle on long
-        // vectors and squashed it flat on short ones. The head keeps its built
-        // size, shrinking only when the arrow is too short to hold it — and
-        // then uniformly, so it stays a cone.
-        let head_height = children
-            .into_iter()
-            .find_map(|&child| heads.get(child).ok().map(|(head, _)| head.height))
-            .unwrap_or(0.0);
-        let head_length = head_height.min(world_length * 0.5);
-        let shaft_length = world_length - head_length;
-
-        for &child in children {
-            if let Ok(mut shaft) = shafts.get_mut(child) {
-                shaft.scale.y = shaft_length.max(1e-4);
-                shaft.translation.y = shaft_length * 0.5;
-            } else if let Ok((head, mut head_transform)) = heads.get_mut(child) {
-                head_transform.scale = Vec3::splat(head_length / head.height);
-                head_transform.translation.y = shaft_length + head_length * 0.5;
-            }
-        }
+        arrow::lay_out(children, world_length, &mut shafts, &mut heads);
     }
 }
 // ─── Tests ────────────────────────────────────────────────────────────────────
