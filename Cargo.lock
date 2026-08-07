@@ -2557,6 +2557,7 @@ dependencies = [
 [[package]]
 name = "egui_charts"
 version = "0.1.0"
+source = "git+https://github.com/lalvesl/egui_shadcn.git?rev=78dd1833eb3a33acfd8711db488e23f73173cf6c#78dd1833eb3a33acfd8711db488e23f73173cf6c"
 dependencies = [
  "egui",
  "epaint",
@@ -2565,6 +2566,7 @@ dependencies = [
 [[package]]
 name = "egui_components"
 version = "0.1.0"
+source = "git+https://github.com/lalvesl/egui_shadcn.git?rev=78dd1833eb3a33acfd8711db488e23f73173cf6c#78dd1833eb3a33acfd8711db488e23f73173cf6c"
 dependencies = [
  "egui",
  "i18n",
@@ -2575,6 +2577,7 @@ dependencies = [
 [[package]]
 name = "egui_sc"
 version = "0.1.0"
+source = "git+https://github.com/lalvesl/egui_shadcn.git?rev=78dd1833eb3a33acfd8711db488e23f73173cf6c#78dd1833eb3a33acfd8711db488e23f73173cf6c"
 dependencies = [
  "egui_charts",
  "egui_components",
@@ -3343,6 +3346,7 @@ checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 [[package]]
 name = "i18n"
 version = "0.1.0"
+source = "git+https://github.com/lalvesl/egui_shadcn.git?rev=78dd1833eb3a33acfd8711db488e23f73173cf6c#78dd1833eb3a33acfd8711db488e23f73173cf6c"
 dependencies = [
  "i18n-format",
  "i18n-macros",
@@ -3352,10 +3356,12 @@ dependencies = [
 [[package]]
 name = "i18n-format"
 version = "0.1.0"
+source = "git+https://github.com/lalvesl/egui_shadcn.git?rev=78dd1833eb3a33acfd8711db488e23f73173cf6c#78dd1833eb3a33acfd8711db488e23f73173cf6c"
 
 [[package]]
 name = "i18n-macros"
 version = "0.1.0"
+source = "git+https://github.com/lalvesl/egui_shadcn.git?rev=78dd1833eb3a33acfd8711db488e23f73173cf6c#78dd1833eb3a33acfd8711db488e23f73173cf6c"
 dependencies = [
  "i18n-format",
  "proc-macro2",

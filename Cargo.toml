@@ -49,11 +49,11 @@ bevy_egui = "0.41.1"
 # does not mention versions.
 #
 # Path dependency for now; moves to the git URL once it is published.
-egui_sc = { path = "../aaaaaaaaa/egui_shadcn/egui_sc", default-features = false }
+egui_sc = { git = "https://github.com/lalvesl/egui_shadcn.git", rev = "78dd1833eb3a33acfd8711db488e23f73173cf6c", default-features = false }
 # `t!` and `traductions!` expand to absolute `::i18n::…` paths, so the crate
 # that invokes them needs `i18n` by name — the `egui_sc::i18n` re-export only
 # covers the runtime API.
-i18n = { path = "../aaaaaaaaa/egui_shadcn/i18n/i18n" }
+i18n = { git = "https://github.com/lalvesl/egui_shadcn.git", rev = "78dd1833eb3a33acfd8711db488e23f73173cf6c" }
 
 # [dev-dependencies]
 # bevy = { version = "0.19.0" }
