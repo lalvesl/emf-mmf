@@ -52,11 +52,18 @@ pub fn phase_displacement(phases: usize) -> f32 {
 
 /// Instantaneous per-unit current of `phase` at electrical angle `elec_angle`.
 ///
+/// A sine, not a cosine, so that the first phase starts its cycle at the origin:
+/// at `elec_angle = 0` phase 0 is at zero and rising, which is where the θ
+/// readout and the left edge of the waveform panel both sit. A cosine put the
+/// first phase at its peak there, so the cycle appeared to begin a quarter turn
+/// in. The choice is only where `t = 0` is placed — every phase still trails the
+/// one before it by `alpha_m`, so the machine behaves identically.
+///
 /// `alpha_m` is [`phase_displacement`], taken as an argument so callers driving
 /// a loop can hoist it out.
 #[inline]
 pub fn phase_current(elec_angle: f32, phase: usize, alpha_m: f32) -> f32 {
-    (elec_angle - phase as f32 * alpha_m).cos()
+    (elec_angle - phase as f32 * alpha_m).sin()
 }
 
 /// Electrical angle spanned by one slot.
