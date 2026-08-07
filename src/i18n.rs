@@ -44,6 +44,7 @@ i18n::traductions! {
         Play([En("Play"), PtBr("Iniciar")]),
         Pause([En("Pause"), PtBr("Pausar")]),
         Speed([En("Speed"), PtBr("Velocidade")]),
+        ElectricalAngle([En("Electrical angle"), PtBr("Ângulo elétrico")]),
 
         Grooves([En("Grooves (slots)"), PtBr("Ranhuras (cavidades)")]),
         Phases([En("Phases"), PtBr("Fases")]),
