@@ -9,6 +9,7 @@ use crate::config::{MotorConfig, ViewConfig};
 use crate::electrical::ElectricalState;
 use crate::i18n::Strings;
 use crate::phase;
+use crate::theme::{axis_color, grid_color, outline_color, plot_corner};
 use crate::ui::PanelLayout;
 use crate::winding::{
     Conductor, Direction, SlotPacking, axis, compute_conductors, compute_winding,
@@ -411,7 +412,7 @@ fn draw_mmf_panel(
     painter.rect_stroke(
         plot_rect,
         2.0,
-        egui::Stroke::new(1.0, theme.border),
+        egui::Stroke::new(1.0, outline_color(&theme)),
         egui::StrokeKind::Middle,
     );
 
@@ -539,21 +540,6 @@ fn draw_mmf_panel(
 
 // ─── Drawing helpers ─────────────────────────────────────────────────────────
 
-/// Corner radius for a plot surface, from the theme's own radius.
-fn plot_corner(theme: &ShadcnTheme) -> egui::CornerRadius {
-    egui::CornerRadius::same(theme.radius as u8)
-}
-
-/// The zero line and other axes a reader should notice but not read past.
-fn axis_color(theme: &ShadcnTheme) -> egui::Color32 {
-    ShadcnTheme::with_alpha(theme.muted_foreground, 90)
-}
-
-/// Reference gridlines — present, but never competing with the curves.
-fn grid_color(theme: &ShadcnTheme) -> egui::Color32 {
-    ShadcnTheme::with_alpha(theme.muted_foreground, 40)
-}
-
 /// Draw a polyline from a closure that maps sample index → screen position.
 ///
 /// Emitted as a single `Shape::line` rather than one shape per segment: at 720
@@ -609,7 +595,7 @@ fn draw_spectrum_panel(
     painter.rect_stroke(
         plot,
         2.0,
-        egui::Stroke::new(1.0, theme.border),
+        egui::Stroke::new(1.0, outline_color(&theme)),
         egui::StrokeKind::Middle,
     );
 
