@@ -8,6 +8,7 @@ use i18n::t;
 
 use crate::config::MotorConfig;
 use crate::i18n::Strings;
+use crate::theme::{axis_color, plot_corner};
 use crate::ui::{PanelLayout, PanelSpace};
 
 pub struct EletricalPlugin;
@@ -120,6 +121,10 @@ fn transport(ui: &mut egui::Ui, state: &mut ElectricalState) {
         (t!(Strings::Play), ICON_PLAY_ARROW)
     };
 
+    // Where the waveform is right now, which is what the playhead marks and
+    // what every arrow in the scene is drawn from.
+    let angle = state.angle.to_degrees().rem_euclid(360.0);
+
     ui.horizontal(|ui| {
         if Button::new(&label)
             .icon(glyph)
@@ -135,7 +140,17 @@ fn transport(ui: &mut egui::Ui, state: &mut ElectricalState) {
             ui,
             &format!("{}: {:.2} Hz", t!(Strings::Speed), state.speed),
         );
-        crate::ui::float_slider(ui, "speed", &mut state.speed, 0.05, 5.0, 0.05);
+
+        // Right to left, so the readout is pinned to the far end and the
+        // slider takes whatever is left. Laid out the other way the label's
+        // width would change with every degree and drag the slider with it.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            Tooltip::new(&t!(Strings::ElectricalAngle)).wrap(ui, |ui| {
+                ui.scope(|ui| muted_text(ui, &format!("θ: {angle:3.0}°")))
+                    .response
+            });
+            crate::ui::float_slider(ui, "speed", &mut state.speed, 0.05, 5.0, 0.05);
+        });
     });
 }
 
@@ -151,12 +166,11 @@ fn draw_waveforms(ui: &mut egui::Ui, config: &MotorConfig, state: &mut Electrica
     );
 
     let painter = ui.painter();
-    let corner = egui::CornerRadius::same(theme.radius as u8);
-    painter.rect_filled(rect, corner, theme.muted);
+    painter.rect_filled(rect, plot_corner(&theme), theme.muted);
 
     // Axes
     let center_y = rect.center().y;
-    painter.hline(rect.x_range(), center_y, (1.0, theme.border));
+    painter.hline(rect.x_range(), center_y, (1.0, axis_color(&theme)));
 
     let m = config.phases;
     let width = rect.width();
