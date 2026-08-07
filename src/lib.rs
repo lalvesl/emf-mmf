@@ -51,6 +51,7 @@ pub fn main() {
                 camera::orbit_camera,
                 stator::regenerate_stator.run_if(resource_changed::<config::MotorConfig>),
                 winding::regenerate_winding.run_if(config::scene_changed),
+                winding::current::animate_current_vectors,
             ),
         )
         .run();
