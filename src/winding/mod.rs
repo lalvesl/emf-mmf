@@ -452,6 +452,7 @@ pub fn regenerate_winding(
     header_coils::render_conductors(&mut commands, &mut meshes, &data, &phase_mats);
     header_coils::render_header_coils(&mut commands, &mut meshes, &data, &phase_mats);
     current::render_current_directions(&mut commands, &mut meshes, &data, &phase_mats_opp);
+    current::render_current_vectors(&mut commands, &mut meshes, &data, &phase_mats);
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
