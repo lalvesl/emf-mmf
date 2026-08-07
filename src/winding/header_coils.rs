@@ -5,6 +5,59 @@ use bevy::render::render_resource::PrimitiveTopology;
 use std::f32::consts::{PI, TAU};
 
 use super::WindingPart;
+use crate::config::STATOR_HEIGHT;
+
+// ─── Endwinding stack ─────────────────────────────────────────────────────────
+
+/// How far above the core face the endwinding basket should reach, as a
+/// fraction of the stator height.
+const BASKET_HEADROOM: f32 = 0.6;
+
+/// Smallest stagger between neighbouring arcs, as a fraction of a wire
+/// diameter.
+///
+/// The ceiling above cannot always be met. A 12-slot machine fills its slot
+/// with a single wire 0.49 across — a quarter of the whole stator height — and
+/// six phases of that simply do not nest in 1.2 of headroom. Compressed to fit,
+/// the tubes would merge into one band and the phases would stop being
+/// separable at all, which is worse than a tall basket. So the stagger stops
+/// shrinking here and the basket is allowed to overrun instead: the wire is
+/// genuinely that thick, and the picture says so.
+const MIN_STAGGER: f32 = 0.35;
+
+/// Where an arc sits in the stack, in units of [`stack_metrics`]'s step.
+///
+/// Phases carry the coarse term so the arcs of one phase stay together, and the
+/// conductors within a phase the fine one so the wires of a single coil do not
+/// fuse into a blob.
+#[inline]
+fn arc_rank(phase: usize, index: usize) -> f32 {
+    phase as f32 * 1.1 + index as f32 * 0.8
+}
+
+/// Base clearance and per-rank step of the endwinding stack, in world units.
+///
+/// The stagger is measured in wire gauges, which is right for keeping tubes
+/// apart — a fat wire needs more room than a thin one. But the gauge is set by
+/// how much space the slot has, so it grows as slots get scarcer, while the
+/// number of arcs to stack depends only on the phase and layer counts. The two
+/// multiplied: six phases on a 12-slot machine climbed to 2.4× the height of
+/// the motor itself, against 0.07× on a 144-slot one.
+///
+/// So the step is the gauge, shrunk if the stack would not otherwise fit under
+/// [`BASKET_HEADROOM`], and never below [`MIN_STAGGER`]. The base clearance is
+/// never compressed: that is what holds the arc clear of the core face.
+fn stack_metrics(wire_size: f32, phases: usize, deep_count: usize) -> (f32, f32) {
+    let base = wire_size * 1.6;
+    let top_rank = arc_rank(phases.saturating_sub(1), deep_count.saturating_sub(1));
+    if top_rank <= 0.0 {
+        return (base, wire_size);
+    }
+
+    let headroom = (STATOR_HEIGHT * BASKET_HEADROOM - base).max(0.0);
+    let step = (headroom / top_rank).clamp(wire_size * MIN_STAGGER, wire_size);
+    (base, step)
+}
 
 // ─── Arc tube mesh builder ─────────────────────────────────────────────────────
 
@@ -211,6 +264,14 @@ pub fn render_header_coils(
     let lead = data.endwinding_lead();
     let y_arc = data.endwinding_y();
 
+    // Stagger the arcs so overlapping coil heads stay readable, bounded so the
+    // basket cannot outgrow the machine it sits on.
+    let (base_lift, stagger) = stack_metrics(
+        wire_size,
+        data.config.phases,
+        data.layout.packing.deep_count(),
+    );
+
     // One arc per conductor that starts a coil; it returns into the shallow
     // half of the slot `pitch` steps away.
     for conductor in data.conductors {
@@ -234,16 +295,7 @@ pub fn render_header_coils(
             a_diff += TAU;
         }
 
-        // Stagger by phase so overlapping coil heads stay readable, and by
-        // conductor so the wires of one coil do not fuse into a single blob.
-        //
-        // All three terms are measured in wire gauges rather than world units:
-        // with few conductors the wire is fat and the arcs need to climb higher
-        // to stay apart, while with many thin wires the per-conductor term
-        // already provides the spread.
-        let lift = wire_size * 1.6
-            + conductor.phase as f32 * wire_size * 1.1
-            + conductor.index as f32 * wire_size * 0.8;
+        let lift = base_lift + arc_rank(conductor.phase, conductor.index) * stagger;
 
         for (y_base, y_offset) in [(y_arc, lift), (-y_arc, -lift)] {
             let mesh = build_arc_tube_mesh(ArcTubeParams {
@@ -264,6 +316,183 @@ pub fn render_header_coils(
                 Transform::default(),
                 WindingPart,
             ));
+        }
+    }
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{STATOR_BORE_RADIUS, slot_bottom_radius};
+    use crate::winding::{SlotLayout, SlotPacking};
+
+    /// Every layout the panel can ask for, as `(wire diameter, phases, deep)`.
+    fn cases() -> impl Iterator<Item = (usize, usize, usize, f32, usize)> {
+        let grooves = [6_usize, 12, 24, 48, 144];
+        grooves.into_iter().flat_map(|n| {
+            (1..=6_usize).flat_map(move |layers| {
+                (1..=crate::config::MAX_PHASES).map(move |phases| {
+                    let layout = SlotLayout::new(
+                        layers,
+                        TAU / n as f32,
+                        STATOR_BORE_RADIUS,
+                        slot_bottom_radius(),
+                    );
+                    let deep = SlotPacking::new(layers).deep_count();
+                    (n, layers, phases, layout.wire_radius * 2.0, deep)
+                })
+            })
+        })
+    }
+
+    /// Height of the tallest arc above the core face.
+    fn basket_height(wire_size: f32, phases: usize, deep: usize) -> f32 {
+        let (base, step) = stack_metrics(wire_size, phases, deep);
+        base + arc_rank(phases.saturating_sub(1), deep.saturating_sub(1)) * step
+    }
+
+    /// The endwindings sit on the machine; they must not dwarf it.
+    ///
+    /// The stagger is measured in wire gauges and the gauge grows as slots get
+    /// scarcer, so six phases on a coarse machine used to climb to 3.49 — 2.4×
+    /// the height of the whole stator — while the same six phases on a 144-slot
+    /// machine reached 0.15.
+    #[test]
+    fn the_basket_never_outgrows_the_motor() {
+        for (n, layers, phases, wire_size, deep) in cases() {
+            let height = basket_height(wire_size, phases, deep);
+            assert!(
+                height <= STATOR_HEIGHT,
+                "n={n} layers={layers} m={phases}: the basket reaches {height:.3}, \
+                 taller than the {STATOR_HEIGHT} stator it stands on"
+            );
+        }
+    }
+
+    /// The bound must only bite where it is needed. A machine fine enough to
+    /// fit under the headroom keeps the full wire-gauge stagger, so capping the
+    /// coarse end did not quietly flatten every other winding.
+    #[test]
+    fn a_fine_winding_keeps_its_full_stagger() {
+        for (n, layers, phases, wire_size, deep) in cases() {
+            let (_, step) = stack_metrics(wire_size, phases, deep);
+            if basket_height(wire_size, phases, deep) < STATOR_HEIGHT * BASKET_HEADROOM {
+                assert!(
+                    (step - wire_size).abs() < 1e-6,
+                    "n={n} layers={layers} m={phases}: fits with room to spare but was \
+                     compressed to {step:.4} against a {wire_size:.4} gauge"
+                );
+            }
+        }
+    }
+
+    /// Arcs must stay in stack order and never share a height, or the phases
+    /// they carry would be impossible to follow where the coil heads overlap.
+    #[test]
+    fn each_rank_sits_above_the_one_below() {
+        for (n, layers, phases, wire_size, deep) in cases() {
+            let (base, step) = stack_metrics(wire_size, phases, deep);
+            assert!(step > 0.0, "n={n} layers={layers} m={phases}: flat stack");
+
+            let mut ranks: Vec<f32> = (0..phases)
+                .flat_map(|p| (0..deep).map(move |i| arc_rank(p, i)))
+                .collect();
+            ranks.sort_by(|a, b| a.partial_cmp(b).expect("ranks are finite"));
+
+            for pair in ranks.windows(2) {
+                let (lower, upper) = (base + pair[0] * step, base + pair[1] * step);
+                assert!(
+                    upper > lower,
+                    "n={n} layers={layers} m={phases}: two arcs share height {lower:.4}"
+                );
+            }
+        }
+    }
+
+    /// The base clearance is what holds the arc off the core face, so the cap
+    /// must compress the stagger and leave it alone.
+    #[test]
+    fn the_cap_never_eats_the_base_clearance() {
+        for (n, layers, phases, wire_size, deep) in cases() {
+            let (base, _) = stack_metrics(wire_size, phases, deep);
+            assert!(
+                (base - wire_size * 1.6).abs() < 1e-6,
+                "n={n} layers={layers} m={phases}: base clearance was compressed"
+            );
+        }
+    }
+
+    /// Every arc as the renderer would place it.
+    fn arcs(n: usize, m: usize, p: usize, layers: usize) -> Vec<(f32, f32, f32, usize, usize)> {
+        let cfg = MotorConfig {
+            groove_count: n,
+            phases: m,
+            pole_pairs: p,
+            layers,
+            short_pitched: false,
+        };
+        let assignments = crate::winding::compute_winding(&cfg);
+        let conductors = crate::winding::compute_conductors(&cfg, &assignments);
+        let layout =
+            SlotLayout::new(layers, TAU / n as f32, STATOR_BORE_RADIUS, slot_bottom_radius());
+        let (base, step) = stack_metrics(layout.wire_radius * 2.0, m, layout.deep_count());
+        let pitch = crate::winding::coil_pitch(&cfg);
+
+        let mut out = Vec::new();
+        for c in &conductors {
+            if !crate::winding::starts_coil(c, layers) {
+                continue;
+            }
+            let a_from = crate::winding::axis::slot_center(c.slot, n);
+            let a_to = crate::winding::axis::slot_center((c.slot + pitch) % n, n);
+            let mut a_diff = a_to - a_from;
+            if a_diff < 0.0 {
+                a_diff += TAU;
+            }
+            out.push((
+                a_from.rem_euclid(TAU),
+                a_diff,
+                base + arc_rank(c.phase, c.index) * step,
+                c.phase,
+                c.index,
+            ));
+        }
+        out
+    }
+
+    #[test]
+    fn probe_symmetry() {
+        for (n, m, p, layers) in [(24_usize, 6_usize, 1_usize, 2_usize), (24, 6, 2, 2), (24, 3, 2, 2)] {
+            let set = arcs(n, m, p, layers);
+            let pole_pitch = PI / p as f32;
+            let mut broken = 0;
+            for (a, d, lift, ph, ix) in &set {
+                let rotated = (a + pole_pitch).rem_euclid(TAU);
+                let hit = set.iter().any(|(a2, d2, l2, ph2, ix2)| {
+                    (a2 - rotated).abs() < 1e-3
+                        && (d2 - d).abs() < 1e-3
+                        && (l2 - lift).abs() < 1e-4
+                        && ph2 == ph
+                        && ix2 == ix
+                });
+                if !hit {
+                    broken += 1;
+                }
+            }
+            println!(
+                "n={n} m={m} p={p}: {} arcs, span={:.0}°, {broken} without a partner a pole pitch away",
+                set.len(),
+                set[0].1.to_degrees()
+            );
+            let mut lifts: Vec<String> = set
+                .iter()
+                .take(14)
+                .map(|(a, _, l, ph, _)| format!("{:.0}°/f{ph}/{l:.3}", a.to_degrees()))
+                .collect();
+            lifts.sort();
+            println!("   {}", lifts.join("  "));
         }
     }
 }
