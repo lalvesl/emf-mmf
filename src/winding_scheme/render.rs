@@ -171,6 +171,30 @@ fn winding_function_spectrum(config: &MotorConfig, conductors: &[Conductor]) -> 
         .collect()
 }
 
+/// Radius of a conductor symbol and the pitch between the columns of one slot.
+///
+/// Sized from the share of the width a *single* conductor gets, which is the
+/// slot pitch divided by the conductors packed side by side in it. Sizing from
+/// the slot pitch alone gave every symbol nearly the whole slot to itself, so a
+/// two-column slot drew its pair on top of each other and the row spilled over
+/// its neighbours.
+fn conductor_symbol(slot_step: f32, row_step: f32, cols: usize) -> (f32, f32) {
+    /// How much of a slot's pitch the symbols may take, leaving the rest as the
+    /// gap that keeps neighbouring slots readable as separate.
+    const SLOT_FILL: f32 = 0.9;
+    /// Column pitch as a multiple of the symbol diameter — just over 1, so the
+    /// two columns of a slot touch but never overlap.
+    const COL_PITCH: f32 = 1.08;
+
+    let cols = cols.max(1) as f32;
+    let span = (cols - 1.0) * COL_PITCH + 1.0;
+    let radius = (slot_step * SLOT_FILL / (2.0 * span))
+        .min(row_step * 0.42)
+        .max(0.0);
+
+    (radius, radius * 2.0 * COL_PITCH)
+}
+
 fn draw_conductor_panel(
     ui: &egui::Ui,
     rect: egui::Rect,
@@ -189,9 +213,13 @@ fn draw_conductor_panel(
     // The same packing the 3D view uses, not a second copy of the arithmetic.
     let packing = SlotPacking::new(config.layers);
 
-    let row_step = 20.0_f32;
-    let sym_r = (slot_step * 0.38).min(row_step * 0.42);
-    let col_step = sym_r * 1.05;
+    // The cap on how tall a row may be; the symbol takes less when the slots
+    // are narrow enough to shrink it.
+    let max_row_step = 20.0_f32;
+    let (sym_r, col_step) = conductor_symbol(slot_step, max_row_step, packing.cols);
+    // Rows follow the symbol rather than sitting at a fixed pitch, or a stack
+    // of small symbols reads as disconnected dots adrift in a tall panel.
+    let row_step = (sym_r * 2.0 * 1.15).min(max_row_step);
 
     // Tick marks, one per slot
     for s in 0..n {
@@ -449,8 +477,11 @@ fn draw_mmf_panel(
         );
     }
 
-    // Draw total MMF (bold, and the one colour nothing else in the plot uses)
-    let total_color = theme.success;
+    // White, the colour the resultant already carries in the 3D overlay and in
+    // the field legend. `foreground` rather than a literal, so it survives a
+    // light theme — nothing else in this plot uses it, so it still stands out
+    // against the phase curves.
+    let total_color = theme.foreground;
     draw_polyline(
         &painter,
         |i| to_screen(i, total_mmf.get(i).copied().unwrap_or(0.0)),
@@ -808,6 +839,58 @@ mod tests {
                     amplitude <= fundamental,
                     "p={pole_pairs}: ν={harmonic} ({amplitude}) beats the fundamental"
                 );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    /// Regression: the column pitch used to be one *radius* while a symbol is
+    /// two radii across, so a slot holding two conductors drew them on top of
+    /// each other and the row bled over its neighbours. Every conductor of a
+    /// slot has to fit inside that slot's share of the width.
+    #[test]
+    fn conductor_symbols_fit_inside_their_slot() {
+        const ROW_STEP: f32 = 20.0;
+        const PADDING: f32 = 24.0;
+
+        for width in [320.0_f32, 620.0, 1200.0] {
+            for slots in [6_usize, 12, 24, 48, 144] {
+                let slot_step = (width - PADDING * 2.0) / slots as f32;
+
+                for layers in 1..=6_usize {
+                    let packing = SlotPacking::new(layers);
+                    let (radius, col_step) = conductor_symbol(slot_step, ROW_STEP, packing.cols);
+
+                    if packing.cols > 1 {
+                        assert!(
+                            col_step >= radius * 2.0,
+                            "w={width} S={slots} layers={layers}: columns sit {col_step} \
+                             apart but are {} across",
+                            radius * 2.0
+                        );
+                    }
+
+                    // The conductor furthest from the slot axis decides how
+                    // wide the whole stack draws.
+                    let furthest = (0..layers)
+                        .map(|i| packing.column_offset(i).abs())
+                        .fold(0.0_f32, f32::max);
+                    let span = 2.0 * (furthest * col_step + radius);
+                    assert!(
+                        span <= slot_step + 1e-3,
+                        "w={width} S={slots} layers={layers}: the stack spans {span} \
+                         across a {slot_step} slot"
+                    );
+
+                    assert!(
+                        radius * 2.0 <= ROW_STEP,
+                        "w={width} S={slots} layers={layers}: rows overlap"
+                    );
+                }
             }
         }
     }
