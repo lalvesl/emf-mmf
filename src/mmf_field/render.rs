@@ -62,9 +62,9 @@ const RESULT_BASE_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 /// over the scene, so a light red would wash out against the phase colours,
 /// which sit at middling lightness. Driving the off-channels to near zero also
 /// separates the rim from any reddish phase by luminance as well as hue.
-const NORTH_COLOR: [f32; 3] = [0.78, 0.02, 0.03];
+pub(crate) const NORTH_COLOR: [f32; 3] = [0.78, 0.02, 0.03];
 /// Rim colour of a south pole. Deep for the same reason as [`NORTH_COLOR`].
-const SOUTH_COLOR: [f32; 3] = [0.02, 0.09, 0.82];
+pub(crate) const SOUTH_COLOR: [f32; 3] = [0.02, 0.09, 0.82];
 
 /// Radial rings across a sector's caps.
 ///
@@ -837,23 +837,29 @@ mod tests {
         }
     }
 
-    /// Phase currents must be a plain cosine — the cubed version used by the
+    /// Phase currents must be a plain sine — the cubed version used by the
     /// field renderer disagreed with the arrows, the waveform panel and the
-    /// current strip, which all use `cos`.
+    /// current strip, which all share this one formula.
     #[test]
-    fn phase_currents_are_balanced_cosines() {
+    fn phase_currents_are_balanced_sines() {
         for phases in [2_usize, 3, 5, 6] {
             let alpha_m = phase_displacement(phases);
 
-            // Phase 0 peaks at t = 0.
-            assert!((phase_current(0.0, 0, alpha_m) - 1.0).abs() < EPS);
+            // Phase 0 begins its cycle at the origin: zero, and rising.
+            assert!(phase_current(0.0, 0, alpha_m).abs() < EPS);
+            assert!(phase_current(0.01, 0, alpha_m) > 0.0);
 
-            // Each phase peaks exactly one displacement later.
+            // Each phase begins exactly one displacement later, and so peaks a
+            // quarter turn after that.
             for phase in 0..phases {
-                let peak = phase as f32 * alpha_m;
+                let start = phase as f32 * alpha_m;
                 assert!(
-                    (phase_current(peak, phase, alpha_m) - 1.0).abs() < EPS,
-                    "m={phases}, phase {phase} does not peak at its own angle"
+                    phase_current(start, phase, alpha_m).abs() < EPS,
+                    "m={phases}, phase {phase} does not start at its own angle"
+                );
+                assert!(
+                    (phase_current(start + PI / 2.0, phase, alpha_m) - 1.0).abs() < EPS,
+                    "m={phases}, phase {phase} does not peak a quarter turn after its start"
                 );
             }
         }
