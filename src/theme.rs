@@ -6,6 +6,65 @@ use egui_sc::egui_components::{ShadcnTheme, register_font};
 
 use crate::ui::PanelLayout;
 
+/// wasm: MaterialIcons is not compiled in (`egui_components`'s build.rs skips
+/// embedding it for `wasm32`), so `register_font` only sets up a stub family —
+/// without this, every `Icon` would panic on the family lookup. This fetches
+/// the real TTF (stripped of GPOS/GSUB by `emf-mmf --strip-icon-font`, wired
+/// into the wasm build in flake.nix — the untouched tables trip a skrifa
+/// parsing bug on wasm32) and swaps it in once it arrives.
+#[cfg(target_arch = "wasm32")]
+mod icon_font {
+    use std::sync::{Mutex, OnceLock};
+
+    static BYTES: OnceLock<Mutex<Option<Vec<u8>>>> = OnceLock::new();
+
+    fn cell() -> &'static Mutex<Option<Vec<u8>>> {
+        BYTES.get_or_init(|| Mutex::new(None))
+    }
+
+    /// Kick off the fetch once. Safe to call more than once — later calls are
+    /// no-ops once the bytes have been taken by `take_loaded`.
+    pub fn spawn_fetch() {
+        web_sys::console::log_1(&"[icon_font] spawn_fetch called".into());
+        wasm_bindgen_futures::spawn_local(async move {
+            web_sys::console::log_1(&"[icon_font] future started".into());
+            match fetch().await {
+                Some(bytes) => {
+                    web_sys::console::log_1(
+                        &format!("[icon_font] fetched {} bytes", bytes.len()).into(),
+                    );
+                    *cell().lock().unwrap() = Some(bytes);
+                }
+                None => {
+                    web_sys::console::log_1(&"[icon_font] fetch returned None".into());
+                }
+            }
+        });
+    }
+
+    /// Returns the fetched font bytes exactly once, the first time they're
+    /// available after the fetch completes.
+    pub fn take_loaded() -> Option<Vec<u8>> {
+        cell().lock().unwrap().take()
+    }
+
+    async fn fetch() -> Option<Vec<u8>> {
+        use wasm_bindgen::JsCast;
+        use wasm_bindgen_futures::JsFuture;
+
+        let window = web_sys::window()?;
+        let resp = JsFuture::from(window.fetch_with_str("MaterialIcons-Regular.ttf"))
+            .await
+            .ok()?;
+        let resp: web_sys::Response = resp.dyn_into().ok()?;
+        if !resp.ok() {
+            return None;
+        }
+        let buf = JsFuture::from(resp.array_buffer().ok()?).await.ok()?;
+        Some(js_sys::Uint8Array::new(&buf).to_vec())
+    }
+}
+
 /// Primary accent hue, or `None` for the neutral zinc default.
 ///
 /// 217° is the library's own blue preset, so the panel matches the component
@@ -115,10 +174,34 @@ fn apply_theme(
     if !*font_registered {
         register_font(ctx);
         *font_registered = true;
+        info!("[theme] register_font done, font_registered=true");
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            info!("[theme] wasm first-run block entered");
+            icon_font::spawn_fetch();
+            info!("[theme] icon_font::spawn_fetch() returned");
+            crate::i18n::init_web(ctx);
+            info!("[theme] crate::i18n::init_web() returned");
+            for lang in crate::i18n::OFFERED {
+                info!("[theme] calling ensure_loaded for {:?}", lang);
+                crate::i18n::ensure_loaded(lang);
+            }
+            info!("[theme] wasm first-run block finished");
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        info!("[theme] NOT compiled for wasm32 (native build)");
+
         // The new definitions are picked up when the next pass begins, so ask
         // for that pass rather than waiting on the next input event.
         ctx.request_repaint();
         return;
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    if let Some(bytes) = icon_font::take_loaded() {
+        egui_sc::egui_components::register_font_bytes(ctx, bytes);
+        ctx.request_repaint();
     }
 
     ready.0 = true;
