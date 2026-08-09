@@ -147,3 +147,112 @@ i18n::traductions! {
         ]),
     }
 }
+
+// ─── wasm: runtime catalog loading ─────────────────────────────────────────
+//
+// `linkme` has no wasm32 backend, so no catalog is compiled into the wasm
+// binary regardless of which `lang-*` features are on — every `t!` call
+// misses and falls back to the `⟦app:variant⟧` marker. The fix is the
+// pattern `egui_shadcn`'s own demo app uses: fetch a pre-generated catalog
+// bundle (produced by `emf-mmf --gen-i18n <dir>`, wired into the wasm build
+// in flake.nix) and install it into the runtime registry via
+// `i18n::install_exported`. Native embeds catalogs at compile time via
+// linkme, so none of this runs there.
+#[cfg(target_arch = "wasm32")]
+pub use web::{ensure_loaded, init_web};
+
+#[cfg(target_arch = "wasm32")]
+mod web {
+    use super::Languages;
+    use bevy_egui::egui;
+    use i18n::Source;
+    use std::collections::HashSet;
+    use std::sync::{Mutex, OnceLock};
+
+    struct WebState {
+        ctx: egui::Context,
+        requested: Mutex<HashSet<u8>>,
+    }
+
+    static STATE: OnceLock<WebState> = OnceLock::new();
+
+    /// On a missing string the runtime dispatcher calls this, which triggers a
+    /// one-shot fetch of that language's catalog bundle.
+    struct WebSource;
+    impl Source for WebSource {
+        fn request(&self, lang: Languages, _app_id: u16, _variant: u8) {
+            ensure_loaded(lang);
+        }
+    }
+
+    /// Register the async source and remember the egui context for repaints.
+    /// Call once, from the same startup path that registers the icon font.
+    pub fn init_web(ctx: &egui::Context) {
+        let _ = STATE.set(WebState {
+            ctx: ctx.clone(),
+            requested: Mutex::new(HashSet::new()),
+        });
+        i18n::set_source(WebSource);
+    }
+
+    /// Fetch + install `lang`'s catalog bundle once. Calls for an already
+    /// loaded / in-flight language are ignored.
+    pub fn ensure_loaded(lang: Languages) {
+        web_sys::console::log_1(&format!("[i18n web] ensure_loaded({})", lang.bcp47()).into());
+        let Some(state) = STATE.get() else {
+            web_sys::console::log_1(&"[i18n web] STATE not set, bailing".into());
+            return;
+        };
+        {
+            let mut seen = state.requested.lock().unwrap();
+            if !seen.insert(lang as u8) {
+                web_sys::console::log_1(&"[i18n web] already requested, skipping".into());
+                return;
+            }
+        }
+        let ctx = state.ctx.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            web_sys::console::log_1(&format!("[i18n web] fetching {}", lang.bcp47()).into());
+            match fetch_cat(lang).await {
+                Some(bytes) => {
+                    web_sys::console::log_1(
+                        &format!("[i18n web] {} -> {} bytes", lang.bcp47(), bytes.len()).into(),
+                    );
+                    // Leak: `install_exported` wants `'static`, and a catalog
+                    // lives for the whole session anyway.
+                    let leaked: &'static [u8] = Box::leak(bytes.into_boxed_slice());
+                    let n = i18n::install_exported(lang, leaked);
+                    web_sys::console::log_1(
+                        &format!("[i18n web] installed {} catalogs for {}", n, lang.bcp47())
+                            .into(),
+                    );
+                    ctx.request_repaint();
+                }
+                None => {
+                    web_sys::console::log_1(
+                        &format!("[i18n web] fetch failed for {}", lang.bcp47()).into(),
+                    );
+                    // Allow a later retry if the fetch failed.
+                    if let Some(s) = STATE.get() {
+                        s.requested.lock().unwrap().remove(&(lang as u8));
+                    }
+                }
+            }
+        });
+    }
+
+    async fn fetch_cat(lang: Languages) -> Option<Vec<u8>> {
+        use wasm_bindgen::JsCast;
+        use wasm_bindgen_futures::JsFuture;
+
+        let window = web_sys::window()?;
+        let url = format!("i18n/{}.cat", lang.bcp47());
+        let resp = JsFuture::from(window.fetch_with_str(&url)).await.ok()?;
+        let resp: web_sys::Response = resp.dyn_into().ok()?;
+        if !resp.ok() {
+            return None;
+        }
+        let buf = JsFuture::from(resp.array_buffer().ok()?).await.ok()?;
+        Some(js_sys::Uint8Array::new(&buf).to_vec())
+    }
+}
