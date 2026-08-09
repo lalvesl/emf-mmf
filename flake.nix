@@ -222,8 +222,25 @@
               ]
               ++ waylandDeps;
 
+              # Needed to link the native helper binary below (wasm itself links
+              # against none of this — the browser provides windowing).
+              buildInputs = waylandDeps;
+
               buildPhase = ''
                 # export HOME=$(mktemp -d)
+
+                # Native helper: wasm has no linkme backend, so it can't collect
+                # translation catalogs itself, and its skrifa build panics on the
+                # raw MaterialIcons TTF. This binary statically reaches every
+                # `traductions!` enum (so linkme collects all catalogs) and does
+                # the GPOS/GSUB strip skrifa needs on wasm32. Both are fetched at
+                # runtime by src/i18n.rs's `web` module and src/theme.rs.
+                cargo build --release --bin emf-mmf
+
+                mkdir -p wasm-assets/i18n
+                ./target/release/emf-mmf --gen-i18n wasm-assets/i18n
+                ./target/release/emf-mmf --strip-icon-font "$EGUI_SHADCN_FONT_PATH" wasm-assets/MaterialIcons-Regular.ttf
+
                 cargo build --profile wasm-release --target wasm32-unknown-unknown --features web
               '';
 
@@ -247,6 +264,12 @@
 
                 # Copy index.html
                 cp web/index.html $out/index.html
+
+                # Runtime-fetched assets: translation catalogs + MaterialIcons
+                # font. Neither is embedded in the wasm binary itself (see
+                # buildPhase comment above) — the app fetches them on startup.
+                cp -r wasm-assets/i18n $out/i18n
+                cp wasm-assets/MaterialIcons-Regular.ttf $out/MaterialIcons-Regular.ttf
               '';
             };
             default = self.packages.${system}.linux;
