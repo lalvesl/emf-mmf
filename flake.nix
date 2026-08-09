@@ -210,6 +210,7 @@
 
               cargoDeps = rustPlatform.importCargoLock {
                 lockFile = ./Cargo.lock;
+                allowBuiltinFetchGit = true;
               };
 
               nativeBuildInputs = [
@@ -259,6 +260,7 @@
 
               cargoDeps = rustPlatform.importCargoLock {
                 lockFile = ./Cargo.lock;
+                allowBuiltinFetchGit = true;
               };
 
               nativeBuildInputs = [
@@ -292,6 +294,7 @@
 
               cargoDeps = rustPlatform.importCargoLock {
                 lockFile = ./Cargo.lock;
+                allowBuiltinFetchGit = true;
               };
 
               nativeBuildInputs = [
@@ -329,6 +332,7 @@
 
               cargoDeps = rustPlatform.importCargoLock {
                 lockFile = ./Cargo.lock;
+                allowBuiltinFetchGit = true;
               };
 
               nativeBuildInputs = [
