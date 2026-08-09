@@ -3,8 +3,8 @@ use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 use egui_sc::egui_components::{
     Alert, AlertVariant, Boxed, Button, ButtonGroup, ButtonGroupVariant, ButtonSize, ButtonVariant,
     ICON_CHECK_CIRCLE, ICON_CHEVRON_LEFT, ICON_LANGUAGE, ICON_MOUSE, ICON_TUNE, ICON_ZOOM_IN, Icon,
-    Separator, ShadcnTheme, Size, Slider, Spacing, Switch, Tooltip, heading4, muted_text,
-    small_text,
+    Separator, ShadcnTheme, Size, Slider, Spacing, Switch, Tooltip, heading4, icon_font_id,
+    muted_text, small_text,
 };
 // Absolute path: `crate::i18n` below binds the name `i18n` in this module, and
 // the macro lives in the crate of the same name.
@@ -173,6 +173,68 @@ pub fn color_chip(ui: &mut egui::Ui, color: egui::Color32) -> egui::Response {
     ui.painter()
         .rect_filled(rect, egui::CornerRadius::same(radius as u8), color);
     response
+}
+
+/// An icon's width held in a row, waiting for the row's height to be known.
+///
+/// A horizontal `Ui` positions each widget against the height known *at the
+/// moment it is added*, and never revisits it. An icon added first is therefore
+/// placed against the default interact height and simply left behind when a
+/// taller control stretches the row — which is why it rode above the language
+/// buttons. Guessing the eventual height and claiming it up front does not
+/// help either: the guess has to match what the control actually measures.
+///
+/// So nothing is guessed. This reserves the glyph's width and no height at all,
+/// the row is built, and [`PendingIcon::paint`] draws onto the finished row.
+struct PendingIcon {
+    galley: std::sync::Arc<egui::Galley>,
+    /// Bounds of the painted marks, in galley-local coordinates.
+    ink: egui::Rect,
+    /// The column the glyph was given, which fixes only its horizontal place.
+    slot: egui::Rect,
+}
+
+fn reserve_icon(
+    ui: &mut egui::Ui,
+    glyph: &'static str,
+    size: f32,
+    color: egui::Color32,
+) -> PendingIcon {
+    // Laying out against a family the context has not bound panics inside
+    // epaint rather than returning empty, which is why everything that paints
+    // components waits on `theme::fonts_ready`.
+    let galley = ui
+        .painter()
+        .layout_no_wrap(glyph.to_owned(), icon_font_id(size), color);
+
+    // A glyph that draws nothing reports unbounded, not zero-sized, which would
+    // make the centring offset `NaN`.
+    let ink = if galley.mesh_bounds.is_finite() {
+        galley.mesh_bounds
+    } else {
+        egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(size))
+    };
+
+    // Zero height: the row's height is the business of the controls in it, and
+    // claiming any would only add a floor the icon does not need.
+    let (slot, _) = ui.allocate_exact_size(egui::vec2(ink.width(), 0.0), egui::Sense::hover());
+    PendingIcon { galley, ink, slot }
+}
+
+impl PendingIcon {
+    /// Paint the glyph on the centre line of `row`, and return it for hovering.
+    ///
+    /// What is centred is the *ink*, not the glyph's line box: a material glyph
+    /// does not fill its line — the font reserves descent the icon never draws
+    /// into — so centring the box would still leave the mark high.
+    fn paint(self, ui: &egui::Ui, row: egui::Rect, color: egui::Color32) -> egui::Response {
+        let center = egui::pos2(self.slot.center().x, row.center().y);
+        ui.painter()
+            .galley(center - self.ink.center().to_vec2(), self.galley, color);
+
+        let rect = egui::Rect::from_center_size(center, self.ink.size());
+        ui.interact(rect, ui.auto_id_with("icon"), egui::Sense::hover())
+    }
 }
 
 /// A phase's colour chip, with the phase name on hover.
@@ -352,12 +414,10 @@ fn language_selector(ui: &mut egui::Ui) {
     let tags: Vec<&str> = i18n::OFFERED.iter().copied().map(i18n::short_tag).collect();
     let selected = i18n::OFFERED.iter().position(|&lang| lang == current);
 
-    ui.horizontal(|ui| {
-        Icon::new(ICON_LANGUAGE)
-            .size(16.0)
-            .color(theme.muted_foreground)
-            .show(ui)
-            .on_hover_text(t!(Strings::Language));
+    // The icon is drawn after the row it belongs to, so it can be centred on
+    // the height the button group actually took rather than on a guess.
+    let row = ui.horizontal(|ui| {
+        let icon = reserve_icon(ui, ICON_LANGUAGE, 16.0, theme.muted_foreground);
 
         if let Some(picked) = ButtonGroup::new(&tags)
             .selected(selected)
@@ -367,7 +427,12 @@ fn language_selector(ui: &mut egui::Ui) {
         {
             i18n::set_language(i18n::OFFERED[picked]);
         }
+        icon
     });
+
+    row.inner
+        .paint(ui, row.response.rect, theme.muted_foreground)
+        .on_hover_text(t!(Strings::Language));
 }
 
 /// The controls that change the shape of the machine. Returns whether anything
@@ -747,5 +812,56 @@ mod tests {
         }
         // Stale indices report hidden rather than panicking.
         assert!(!field.shows_phase(MAX_PHASES));
+    }
+
+    /// The icon must land on the same centre line as the control beside it.
+    ///
+    /// Measured against the real `ButtonGroup`, not a stand-in: the previous
+    /// attempt centred the icon on `Size::Sm.height()` and did not move it a
+    /// pixel, because that is not the height the group actually takes.
+    #[test]
+    fn the_language_icon_shares_the_row_centre_line() {
+        let ctx = egui::Context::default();
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(300.0, 200.0),
+            )),
+            ..Default::default()
+        };
+
+        // The icon family has to be bound or laying it out panics, and new font
+        // definitions only take effect at the start of the *next* pass — the
+        // same one-frame delay `theme::FontsReady` exists to wait out.
+        egui_sc::egui_components::register_font(&ctx);
+        ShadcnTheme::set(&ctx, ShadcnTheme::build(true, None));
+        let _ = ctx.run_ui(input.clone(), |_| {});
+
+        let (mut icon_y, mut row) = (0.0_f32, egui::Rect::NOTHING);
+        let _ = ctx.run_ui(input, |ui| {
+            let held = ui.horizontal(|ui| {
+                let icon = reserve_icon(ui, ICON_LANGUAGE, 16.0, egui::Color32::WHITE);
+                let _ = ButtonGroup::new(&["PT", "EN"])
+                    .selected(Some(0))
+                    .variant(ButtonGroupVariant::Outline)
+                    .size(Size::Sm)
+                    .show(ui);
+                icon
+            });
+            row = held.response.rect;
+            icon_y = held
+                .inner
+                .paint(ui, row, egui::Color32::WHITE)
+                .rect
+                .center()
+                .y;
+        });
+
+        assert!(
+            (icon_y - row.center().y).abs() < 0.5,
+            "the icon centres at {icon_y} in a row {:.2} tall centred at {:.2}",
+            row.height(),
+            row.center().y
+        );
     }
 }
