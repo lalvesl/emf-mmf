@@ -2607,6 +2607,10 @@ dependencies = [
  "bevy_egui",
  "egui_sc",
  "i18n",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

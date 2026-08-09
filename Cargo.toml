@@ -55,6 +55,15 @@ egui_sc = { git = "https://github.com/lalvesl/egui_shadcn.git", rev = "78dd1833e
 # covers the runtime API.
 i18n = { git = "https://github.com/lalvesl/egui_shadcn.git", rev = "78dd1833eb3a33acfd8711db488e23f73173cf6c" }
 
+# wasm has no linkme backend, so no translation catalog or MaterialIcons font
+# is compiled in — both are fetched at runtime instead (see src/i18n.rs's `web`
+# module and src/theme.rs's icon-font fetch). These are what that path needs.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Window", "Response"] }
+js-sys = "0.3"
+
 # [dev-dependencies]
 # bevy = { version = "0.19.0" }
 
