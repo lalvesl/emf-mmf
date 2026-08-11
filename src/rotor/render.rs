@@ -264,8 +264,11 @@ fn animate_rotor(
     // We calculate the mechanical offset required to align the Rotor North pole
     // with that peak.
 
-    // Magnetic axis of phase A, pole 0, at state.angle = 0.
-    let mmf_peak_axis_0 = crate::winding::axis::magnetic_axis(&config, 0, 0);
+    // Where the resultant MMF (and so the arrow the rotor chases) points at
+    // state.angle = 0. Not `magnetic_axis(&config, 0, 0)` — that is phase A's
+    // own axis, a quarter electrical turn ahead of where a sine-driven
+    // balanced set actually peaks; see `axis::resultant_axis`.
+    let mmf_peak_axis_0 = crate::winding::axis::resultant_axis(&config, 0, 0.0);
 
     // The center of the rotor's first North pole in its local coordinate system
     let rotor_pole_width = TAU / (2.0 * p);
