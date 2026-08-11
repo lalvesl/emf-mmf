@@ -149,6 +149,9 @@ fn transport(ui: &mut egui::Ui, state: &mut ElectricalState) {
                 ui.scope(|ui| muted_text(ui, &format!("θ: {angle:3.0}°")))
                     .response
             });
+            // Without this, the slider claims the readout's corner too — its
+            // thumb can land flush against (or under) the "θ" glyph.
+            ui.add_space(8.0);
             crate::ui::float_slider(ui, "speed", &mut state.speed, 0.05, 5.0, 0.05);
         });
     });
