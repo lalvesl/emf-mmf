@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use std::f32::consts::PI;
 
 use crate::config::{MotorConfig, ViewConfig};
 use crate::electrical::ElectricalState;
@@ -63,8 +62,9 @@ fn phase_vector(
 ///
 /// The phasor sum has to be taken in *electrical* space. There the phase axes
 /// sit exactly one phase displacement apart, which is what makes a balanced
-/// set collapse to `Σ û(k·α_m)·cos(ωt − k·α_m) = (m/2)·û(ωt)`: one vector, of
-/// constant magnitude, turning at `ω`.
+/// set collapse to one vector of constant magnitude, turning at `ω` — see
+/// [`axis::resultant_axis`] for the closed form (and why it trails the phase
+/// axes by a quarter turn).
 ///
 /// Adding up the arrows as they are *drawn* does not work. Their mechanical
 /// axes are compressed by `1/p` while the currents still shift by the full
@@ -76,13 +76,7 @@ fn phase_vector(
 /// already driven at, so the arrow and the rotor's north pole now coincide by
 /// construction rather than by coincidence.
 fn resultant_vector(config: &MotorConfig, pole: usize, elec_angle: f32) -> Vec3 {
-    let p = config.pole_pairs.max(1) as f32;
-
-    // Left unwrapped: the `pole·π` term is what spreads the poles around the
-    // bore once divided by `p`, so it must not be folded into `(-π, π]`.
-    let elec = pole as f32 * PI + axis::axis_offset_elec(config) + elec_angle;
-    let mech = elec / p + axis::slot_center(0, config.groove_count);
-
+    let mech = axis::resultant_axis(config, pole, elec_angle);
     let magnitude = config.phases as f32 / 2.0;
     Vec3::new(mech.cos(), 0.0, mech.sin()) * magnitude
 }
@@ -265,7 +259,7 @@ fn animate_vectors(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::f32::consts::TAU;
+    use std::f32::consts::{PI, TAU};
 
     const EPS: f32 = 1e-4;
 
@@ -441,7 +435,7 @@ mod tests {
             for step in 0..12 {
                 let t = step as f32 * TAU / 12.0;
                 // Exactly what `rotor::render` uses to place its north pole.
-                let rotor_north = axis::magnetic_axis(&cfg, 0, 0) + t / pole_pairs as f32;
+                let rotor_north = axis::resultant_axis(&cfg, 0, 0.0) + t / pole_pairs as f32;
                 let arrow = heading(resultant_vector(&cfg, 0, t));
                 assert!(
                     angle_between(rotor_north, arrow) < EPS,
