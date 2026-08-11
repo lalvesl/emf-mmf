@@ -105,6 +105,22 @@ pub fn magnetic_axis(config: &MotorConfig, phase: usize, pole: usize) -> f32 {
     (start_elec + axis_offset_elec(config)) / p + slot_center(0, config.groove_count)
 }
 
+/// Mechanical angle of the resultant MMF's peak for `pole`, at `elec_angle` —
+/// the axis the 3D arrow points along and the one the rotor chases.
+///
+/// [`phase_current`] is a `sin`, zero and rising at `elec_angle = 0`, not a
+/// `cos` peaking there. For a balanced `m`-phase set that pushes the phasor
+/// sum a quarter turn behind the naive electrical frame:
+/// `Σ_k e^{j(kα+φ0)}·sin(θ-kα) = (m/2)·e^{j(θ+φ0-π/2)}`. Building the arrow
+/// from `θ+φ0` directly (no `-π/2`) pointed it, and the rotor with it, a
+/// quarter *electrical* turn away from where the currents actually put the
+/// field — a `π/(2p)` mechanical error that grows with pole count.
+pub fn resultant_axis(config: &MotorConfig, pole: usize, elec_angle: f32) -> f32 {
+    let p = config.pole_pairs.max(1) as f32;
+    let elec = pole as f32 * PI + axis_offset_elec(config) + elec_angle - PI / 2.0;
+    elec / p + slot_center(0, config.groove_count)
+}
+
 // ─── Winding factors (feature `harmonics`) ────────────────────────────────────
 
 /// Coil span as a fraction of the pole pitch (`y / τ`).
