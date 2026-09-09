@@ -1,5 +1,6 @@
-use crate::config::{MotorConfig, ROTOR_RADIUS, STATOR_HEIGHT, ViewConfig};
+use crate::config::{MotorConfig, ROTOR_RADIUS, RotorConfig, STATOR_HEIGHT, ViewConfig};
 use crate::electrical::ElectricalState;
+use crate::rotor::torque::RotorEquilibrium;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::Indices;
 use bevy::prelude::*;
@@ -10,11 +11,11 @@ pub struct RotorPlugin;
 
 impl Plugin for RotorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.init_resource::<RotorEquilibrium>().add_systems(
             Update,
             (
-                regenerate_rotor.run_if(crate::config::scene_changed),
-                animate_rotor,
+                regenerate_rotor.run_if(crate::config::rotor_shape_changed),
+                (super::torque::solve_equilibrium, animate_rotor).chain(),
             ),
         );
     }
@@ -32,6 +33,7 @@ fn regenerate_rotor(
     mut commands: Commands,
     config: Res<MotorConfig>,
     view: Res<ViewConfig>,
+    rotor: Res<RotorConfig>,
     query: Query<Entity, With<RotorPart>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -48,7 +50,7 @@ fn regenerate_rotor(
         return;
     }
 
-    let p = config.pole_pairs;
+    let p = rotor.effective_pole_pairs(&config);
     let h = STATOR_HEIGHT;
     let r = ROTOR_RADIUS * 0.8;
 
@@ -243,10 +245,41 @@ fn build_rotor_sector_mesh(
     mesh.insert_indices(Indices::U32(indices));
     mesh
 }
+/// Mechanical angle the rotor root is turned to, before Bevy's sign flip.
+///
+/// The equilibrium is solved against the field of this very frame, so the
+/// synchronous rotation is *already inside* `resting`. Adding `state.angle /
+/// p_s` on top of it — as the earlier extrapolating version had to — spins the
+/// rotor at twice the field's speed. Pulled out of the system so that stays a
+/// testable claim rather than a comment.
+fn rotor_rotation(
+    equilibrium: &RotorEquilibrium,
+    config: &MotorConfig,
+    rotor_pole_pairs: usize,
+    load_angle: f32,
+    elec_angle: f32,
+) -> f32 {
+    // The fallback is the old geometric alignment, and it is only ever reached
+    // when the field has no grip on this rotor at all. Nothing is holding it
+    // anywhere then, so one position is as defensible as another, and this one
+    // at least lines a pole up with the resultant arrow — which carries the
+    // synchronous rotation of its own accord.
+    let resting = equilibrium.resting().unwrap_or_else(|| {
+        crate::winding::axis::resultant_axis(config, 0, elec_angle)
+            - TAU / (4.0 * rotor_pole_pairs.max(1) as f32)
+    });
+
+    // How far the rotor is held from that rest. Subtracted, so a positive angle
+    // lags the field — the direction a load pulls a motor. `settle` is what
+    // folds a command past half a well into the next one, which is the slip.
+    resting - equilibrium.settle(load_angle)
+}
 
 fn animate_rotor(
     config: Res<MotorConfig>,
     view: Res<ViewConfig>,
+    rotor: Res<RotorConfig>,
+    equilibrium: Res<RotorEquilibrium>,
     state: Res<ElectricalState>,
     mut query: Query<&mut Transform, With<RotorRoot>>,
 ) {
@@ -254,31 +287,79 @@ fn animate_rotor(
         return;
     }
 
-    let p = config.pole_pairs as f32;
-    // if p == 0.0 {
-    //     return;
-    // }
-
-    // --- Synchronization with MMF Vectors ---
-    // The Peak of the Resultant MMF field rotates at state.angle / p.
-    // We calculate the mechanical offset required to align the Rotor North pole
-    // with that peak.
-
-    // Where the resultant MMF (and so the arrow the rotor chases) points at
-    // state.angle = 0. Not `magnetic_axis(&config, 0, 0)` — that is phase A's
-    // own axis, a quarter electrical turn ahead of where a sine-driven
-    // balanced set actually peaks; see `axis::resultant_axis`.
-    let mmf_peak_axis_0 = crate::winding::axis::resultant_axis(&config, 0, 0.0);
-
-    // The center of the rotor's first North pole in its local coordinate system
-    let rotor_pole_width = TAU / (2.0 * p);
-    let rotor_pole_0_center_local = rotor_pole_width / 2.0; // i.e. PI / (2.0 * p)
-
-    // We want: rotor_pole_0_center_local + rotation_offset = mmf_peak_axis_0
-    let rotation_offset = mmf_peak_axis_0 - rotor_pole_0_center_local;
+    let rotation = rotor_rotation(
+        &equilibrium,
+        &config,
+        rotor.effective_pole_pairs(&config),
+        rotor.load_angle,
+        state.angle,
+    );
 
     // Apply rotation (CCW direction to match vectors)
     for mut transform in &mut query {
-        transform.rotation = Quat::from_rotation_y(-(state.angle / p + rotation_offset));
+        transform.rotation = Quat::from_rotation_y(-rotation);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rotor::torque;
+    use bevy::prelude::default;
+    use std::f32::consts::PI;
+
+    const GRADIENT: f32 = 2.0;
+
+    fn config(pole_pairs: usize) -> MotorConfig {
+        MotorConfig {
+            pole_pairs,
+            groove_count: 72,
+            phases: 3,
+            ..default()
+        }
+    }
+
+    /// Regression: one full electrical turn must advance the rotor by exactly
+    /// one pole-pair pitch. An earlier version added the synchronous rotation
+    /// on top of an equilibrium that already carried it, and the rotor ran at
+    /// double speed — which no test of the solver alone could have caught.
+    #[test]
+    fn a_full_electrical_turn_advances_exactly_one_pole_pair_pitch() {
+        const FRAMES: usize = 180;
+
+        // Both paths: a pair the field grips, and a pair it ignores, which
+        // falls back on geometry and has to track the field just the same.
+        for (p_s, p_r) in [(1_usize, 1_usize), (2, 2), (3, 3), (3, 1), (2, 3)] {
+            let config = config(p_s);
+            let expected = TAU / p_s as f32;
+
+            let mut chosen: Option<f32> = None;
+            let mut start = 0.0;
+            let mut total = 0.0;
+            let mut last = 0.0;
+
+            for frame in 0..=FRAMES {
+                let elec = frame as f32 * TAU / FRAMES as f32;
+                let mut solved = torque::solve(&config, p_r, GRADIENT, elec);
+                solved.chosen = torque::pick_nearest(&solved, chosen);
+                chosen = solved.chosen;
+
+                let now = rotor_rotation(&solved, &config, p_r, 0.0, elec);
+                if frame == 0 {
+                    start = now;
+                } else {
+                    // Unwrapped, so a walk that crosses the seam still counts.
+                    let step = (now - last + PI).rem_euclid(TAU) - PI;
+                    total += step;
+                }
+                last = now;
+            }
+
+            let _ = start;
+            assert!(
+                (total - expected).abs() < 0.05,
+                "p_s={p_s} p_r={p_r}: turned {total} over an electrical turn, expected {expected}"
+            );
+        }
     }
 }
