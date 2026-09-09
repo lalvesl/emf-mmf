@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::f32::consts::PI;
 
 /// Upper bound on the number of phases the simulator supports.
 ///
@@ -147,4 +148,89 @@ pub const STATOR_HEIGHT: f32 = 2.0;
 #[inline]
 pub const fn slot_bottom_radius() -> f32 {
     STATOR_BORE_RADIUS + SLOT_DEPTH
+}
+
+// ─── Rotor ────────────────────────────────────────────────────────────────────
+
+/// The rotor's own pole count, and how hard it is being pushed out of place.
+///
+/// Split off from [`MotorConfig`] because only the rotor reads it: the winding,
+/// the MMF arrows and the field overlay are all stator-side, and none of them
+/// should rebuild because the rotor was pushed round in its socket. Split off
+/// from [`ViewConfig`] because the pole count is not a view setting — it
+/// decides how many sectors the rotor mesh is built from.
+///
+/// Where the rotor actually *rests* is deliberately not here. That cannot be
+/// derived from the two pole counts: it depends on the field the rotor is
+/// sitting in, so it is measured in [`crate::rotor::torque`] instead.
+#[derive(Resource, Clone, Debug, PartialEq)]
+pub struct RotorConfig {
+    /// Whether the rotor keeps a pole count of its own instead of inheriting
+    /// the stator's.
+    ///
+    /// Off by default, and deliberately so: for most mismatched pairs the two
+    /// fields share no harmonic at all, so the stator develops no torque on the
+    /// rotor whatsoever and there is no position it prefers. This is a
+    /// demonstration of why the counts have to agree, not a machine anyone
+    /// would build.
+    pub independent_poles: bool,
+    /// Rotor pole pairs. Read only while `independent_poles` is set, so the
+    /// value survives toggling the flag off and back on.
+    pub pole_pairs: usize,
+    /// Commanded angle between the rotor's resting position and where it is
+    /// being held, in mechanical radians. Positive lags the field, which is the
+    /// direction a mechanical load pulls a motor.
+    pub load_angle: f32,
+}
+
+impl Default for RotorConfig {
+    fn default() -> Self {
+        Self {
+            independent_poles: false,
+            pole_pairs: 1,
+            load_angle: 0.0,
+        }
+    }
+}
+
+impl RotorConfig {
+    pub const MIN: Self = Self {
+        independent_poles: false,
+        pole_pairs: 1,
+        load_angle: -PI,
+    };
+
+    pub const MAX: Self = Self {
+        independent_poles: true,
+        pole_pairs: 6,
+        load_angle: PI,
+    };
+
+    /// Pole pairs the rotor is actually built with.
+    #[inline]
+    pub fn effective_pole_pairs(&self, motor: &MotorConfig) -> usize {
+        if self.independent_poles {
+            self.pole_pairs.max(1)
+        } else {
+            motor.pole_pairs.max(1)
+        }
+    }
+}
+
+/// Run condition for the rotor's geometry.
+///
+/// The load angle turns the rotor without reshaping it, so it is deliberately
+/// absent here: dragging that slider must not rebuild a single mesh. Only the
+/// effective pole count is tracked, which also means toggling
+/// `independent_poles` back and forth with a matching count is free.
+pub fn rotor_shape_changed(
+    config: Res<MotorConfig>,
+    view: Res<ViewConfig>,
+    rotor: Res<RotorConfig>,
+    mut last: Local<Option<usize>>,
+) -> bool {
+    let poles = rotor.effective_pole_pairs(&config);
+    let reshaped = *last != Some(poles);
+    *last = Some(poles);
+    reshaped || config.is_changed() || view.is_changed()
 }
