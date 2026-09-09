@@ -10,7 +10,7 @@ use egui_sc::egui_components::{
 // the macro lives in the crate of the same name.
 use ::i18n::t;
 
-use crate::config::{MotorConfig, ViewConfig};
+use crate::config::{MotorConfig, RotorConfig, ViewConfig};
 use crate::i18n::{self, Strings};
 use crate::phase;
 
@@ -22,6 +22,7 @@ impl Plugin for UiPlugin {
             .add_plugins(i18n::I18nPlugin)
             .add_plugins(crate::theme::ThemePlugin)
             .init_resource::<PanelSpace>()
+            .init_resource::<PointerOverPanel>()
             .configure_sets(
                 EguiPrimaryContextPass,
                 (
@@ -39,10 +40,59 @@ impl Plugin for UiPlugin {
                     ui_panel
                         .in_set(PanelLayout::Side)
                         .run_if(crate::theme::fonts_ready),
+                    track_pointer_over_panel.after(PanelLayout::Bottom),
                 ),
             );
     }
 }
+
+/// Whether the pointer sits over one of the docked panels.
+///
+/// The camera needs this to stop orbiting and zooming through the panels, and
+/// `bevy_egui` ships `EguiWantsInput` for exactly that. Reading the resource
+/// did not work here: the camera kept zooming while the pointer scrolled over
+/// the config panel. Computing the same answer from [`PanelSpace`] does work.
+///
+/// Why the resource comes up short was never pinned down — a headless pass
+/// shows egui resolving these panels correctly, so the obvious explanations
+/// (the hand-made background-layer `Ui`, the schedule the panels are built in)
+/// were both tested and neither held. Recorded as observed rather than
+/// explained, because the tidy-looking story turned out to be wrong twice.
+///
+/// What is certain is that the leftover rect is known: [`PanelSpace`] holds
+/// exactly it once the last panel has claimed. This records the answer at that
+/// point, in egui's own coordinates, for the systems that run outside the pass.
+#[derive(Resource, Default)]
+pub struct PointerOverPanel(pub bool);
+
+/// Whether `pointer` — egui's own interact position — falls outside the space
+/// the panels left free.
+///
+/// Split out from the system so it can be tested against a real egui pass.
+pub fn pointer_is_over_panel(free: egui::Rect, pointer: Option<egui::Pos2>) -> bool {
+    pointer.is_some_and(|pos| !free.contains(pos))
+}
+
+/// Record, once every panel has claimed its space, whether the pointer is on
+/// one of them.
+fn track_pointer_over_panel(
+    mut contexts: EguiContexts,
+    space: Res<PanelSpace>,
+    mut over: ResMut<PointerOverPanel>,
+) {
+    let Ok(ctx) = contexts.ctx_mut() else {
+        return;
+    };
+    let pointer = ctx.input(|i| i.pointer.interact_pos());
+    over.0 = pointer_is_over_panel(space.0, pointer);
+}
+/// Space kept clear on the right of the scrolled panel content.
+///
+/// The scrollbar is drawn inside the panel width rather than beside it, so a
+/// widget laid out to the full available width reaches under it. A slider is
+/// what makes that visible: its thumb sits at the very end of the track, and
+/// at full travel it ended up half-hidden behind the bar.
+const SCROLL_GUTTER: i8 = 8;
 
 /// Screen space still free for docked panels this frame.
 ///
@@ -312,6 +362,8 @@ fn ui_panel(
     mut contexts: EguiContexts,
     mut config: ResMut<MotorConfig>,
     mut view: ResMut<ViewConfig>,
+    mut rotor: ResMut<RotorConfig>,
+    equilibrium: Res<crate::rotor::torque::RotorEquilibrium>,
     mut space: ResMut<PanelSpace>,
     mut minimized: Local<bool>,
 ) {
@@ -327,6 +379,7 @@ fn ui_panel(
     // anything moved — so every regeneration system would run continuously.
     let mut next_config = config.clone();
     let mut next_view = view.clone();
+    let mut next_rotor = rotor.clone();
 
     if *minimized {
         egui::Area::new(egui::Id::new("maximize_panel_area"))
@@ -364,36 +417,67 @@ fn ui_panel(
                     });
                 });
 
-                language_selector(ui);
+                // The panel outgrew the viewport once the rotor controls and
+                // their readout landed in it, and a side panel does not scroll
+                // on its own — everything past the bottom edge was simply
+                // unreachable. The header stays outside the scrolled region so
+                // the minimize button cannot scroll away with the rest.
+                //
+                // `auto_shrink` off in both directions: left to itself the area
+                // shrinks to its content, which would undo the panel's own
+                // width and make the scrollbar jump around as controls appear
+                // and disappear.
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        // The bar is drawn inside the panel's width, so content
+                        // laid out to the full available width runs underneath
+                        // it — at the right end of its travel a slider's thumb
+                        // ended up half under the bar. Reserved once here
+                        // rather than left for each widget to guess at.
+                        egui::Frame::NONE
+                            .inner_margin(egui::Margin {
+                                right: SCROLL_GUTTER,
+                                ..egui::Margin::ZERO
+                            })
+                            .show(ui, |ui| {
+                                language_selector(ui);
 
-                Spacing::Sm.show(ui);
-                Separator::horizontal().show(ui);
-                Spacing::Sm.show(ui);
+                                Spacing::Sm.show(ui);
+                                Separator::horizontal().show(ui);
+                                Spacing::Sm.show(ui);
 
-                machine_controls(ui, &mut next_config);
+                                machine_controls(ui, &mut next_config);
 
-                Spacing::Sm.show(ui);
-                Separator::horizontal().show(ui);
-                Spacing::Sm.show(ui);
+                                Spacing::Sm.show(ui);
+                                Separator::horizontal().show(ui);
+                                Spacing::Sm.show(ui);
 
-                // The remaining controls only change what is drawn, never the
-                // shape of the machine.
-                crate::winding::ui::winding_ui(ui, &mut next_view);
-                crate::mmf_field::ui::mmf_ui(ui, &next_config, &mut next_view);
-                crate::rotor::ui::rotor_ui(ui, &mut next_view);
-                crate::winding_scheme::ui::winding_scheme_ui(ui, &mut next_view);
-                toggle_row(
-                    ui,
-                    &mut next_view.show_vectors,
-                    &t!(Strings::ShowVectors),
-                    None,
-                );
+                                // The remaining controls only change what is drawn, never the
+                                // shape of the machine.
+                                crate::winding::ui::winding_ui(ui, &mut next_view);
+                                crate::mmf_field::ui::mmf_ui(ui, &next_config, &mut next_view);
+                                crate::rotor::ui::rotor_ui(
+                                    ui,
+                                    &equilibrium,
+                                    &mut next_view,
+                                    &mut next_rotor,
+                                );
+                                crate::winding_scheme::ui::winding_scheme_ui(ui, &mut next_view);
+                                toggle_row(
+                                    ui,
+                                    &mut next_view.show_vectors,
+                                    &t!(Strings::ShowVectors),
+                                    None,
+                                );
 
-                Spacing::Md.show(ui);
-                readout(ui, &next_config);
+                                Spacing::Md.show(ui);
+                                readout(ui, &next_config);
 
-                Spacing::Md.show(ui);
-                hints(ui);
+                                Spacing::Md.show(ui);
+                                hints(ui);
+                            });
+                    });
             });
     }
 
@@ -406,6 +490,7 @@ fn ui_panel(
     // value, so the motor follows the handle live.
     config.set_if_neq(next_config);
     view.set_if_neq(next_view);
+    rotor.set_if_neq(next_rotor);
 }
 
 fn language_selector(ui: &mut egui::Ui) {
@@ -862,6 +947,74 @@ mod tests {
             "the icon centres at {icon_y} in a row {:.2} tall centred at {:.2}",
             row.height(),
             row.center().y
+        );
+    }
+
+    /// What the two pointer tests actually report over a docked panel.
+    ///
+    /// Written while chasing a camera that zoomed through the config panel. It
+    /// disproved the guess it was written for: egui *does* resolve these
+    /// hand-made background-layer panels, so `is_pointer_over_egui` is not the
+    /// broken link. Kept because it pins both signals — if either flips, the
+    /// camera guard is the thing that breaks, and this says which one moved.
+    #[test]
+    fn both_pointer_tests_agree_over_a_docked_panel() {
+        const PANEL_WIDTH: f32 = 220.0;
+
+        let ctx = egui::Context::default();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+
+        let probe = |pointer: egui::Pos2| -> (bool, bool) {
+            let mut free = egui::Rect::NOTHING;
+            let mut egui_sees_it = false;
+
+            // Twice: egui resolves hovering against the previous pass's layout,
+            // so a single pass would report on an empty screen.
+            for _ in 0..2 {
+                let input = egui::RawInput {
+                    screen_rect: Some(screen),
+                    events: vec![egui::Event::PointerMoved(pointer)],
+                    ..Default::default()
+                };
+                // `begin_pass`/`end_pass` rather than `run_ui`: the panel needs the
+                // `Context` itself, not the root `Ui` that `run_ui` hands over.
+                ctx.begin_pass(input);
+                {
+                    let mut space = PanelSpace(ctx.viewport_rect());
+                    let mut viewport = space.ui(&ctx, "probe_viewport");
+                    egui::Panel::left("probe_panel")
+                        .min_size(PANEL_WIDTH)
+                        .default_size(PANEL_WIDTH)
+                        .show(&mut viewport, |ui| {
+                            ui.label("config");
+                        });
+                    space.claim(&viewport);
+
+                    free = space.0;
+                    egui_sees_it = ctx.is_pointer_over_egui();
+                }
+                let _ = ctx.end_pass();
+            }
+
+            (egui_sees_it, pointer_is_over_panel(free, Some(pointer)))
+        };
+
+        let (egui_sees_it, leftover_sees_it) = probe(egui::pos2(PANEL_WIDTH * 0.5, 300.0));
+        assert!(
+            egui_sees_it,
+            "egui stopped resolving background-layer panels"
+        );
+        assert!(
+            leftover_sees_it,
+            "the leftover rect must catch a pointer sitting on the panel"
+        );
+
+        // And the scene itself must stay draggable, or the guard would freeze
+        // the camera everywhere instead of only over the panels.
+        let (_, leftover_sees_scene) = probe(egui::pos2(600.0, 300.0));
+        assert!(
+            !leftover_sees_scene,
+            "the free viewport must not count as a panel"
         );
     }
 }
