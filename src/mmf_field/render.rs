@@ -179,6 +179,59 @@ fn angular_distance(a: f32, b: f32) -> f32 {
     d.min(TAU - d)
 }
 
+/// The resultant MMF wave, sampled at any mechanical angle.
+///
+/// The overlay and the rotor both need this curve and must not derive it
+/// separately: the rotor is placed by where this field pushes it, so a rotor
+/// answering to a slightly different field than the one on screen is exactly
+/// the desynchronisation `winding::axis` exists to prevent. The lobes are
+/// gathered once and then sampled, because both callers want many angles from
+/// the same instant.
+pub struct ResultantField {
+    /// `(mechanical axis, signed amplitude)` for every phase×pole lobe.
+    lobes: Vec<(f32, f32)>,
+    half_span: f32,
+    gradient_intensity: f32,
+}
+
+impl ResultantField {
+    pub fn new(config: &MotorConfig, elec_angle: f32, gradient_intensity: f32) -> Self {
+        let m = config.phases;
+        let p = config.pole_pairs.max(1);
+        let alpha_m = phase_displacement(m);
+
+        let lobes = (0..(2 * p))
+            .flat_map(|pole| (0..m).map(move |phase| (pole, phase)))
+            .map(|(pole, phase)| {
+                // Consecutive poles invert the field direction, which is what
+                // makes the wave alternate north/south around the bore.
+                let sign = if pole % 2 == 0 { 1.0 } else { -1.0 };
+                (
+                    magnetic_axis(config, phase, pole),
+                    phase_current(elec_angle, phase, alpha_m) * sign,
+                )
+            })
+            .collect();
+
+        Self {
+            lobes,
+            half_span: lobe_half_span(p),
+            gradient_intensity,
+        }
+    }
+
+    /// Signed MMF at a mechanical angle. Positive is a north, which is what
+    /// paints the rim red.
+    pub fn at(&self, a_mech: f32) -> f32 {
+        self.lobes
+            .iter()
+            .map(|&(axis_angle, amplitude)| {
+                lobe_bell(a_mech, axis_angle, self.half_span, self.gradient_intensity) * amplitude
+            })
+            .sum()
+    }
+}
+
 // ─── Regenerate (on config change) ───────────────────────────────────────────
 
 fn regenerate_field(
