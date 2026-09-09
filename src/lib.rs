@@ -44,6 +44,7 @@ pub fn main() {
         .add_plugins(winding_scheme::render::WindingSchemePlugin)
         .init_resource::<config::MotorConfig>()
         .init_resource::<config::ViewConfig>()
+        .init_resource::<config::RotorConfig>()
         .add_systems(Startup, setup::setup)
         .add_systems(
             Update,
