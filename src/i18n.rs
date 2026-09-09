@@ -70,6 +70,81 @@ i18n::traductions! {
         ShowVectors([En("Show MMF vectors"), PtBr("Mostrar vetores FMM")]),
         ShowRotor([En("Show rotor"), PtBr("Mostrar rotor")]),
 
+        RotorIndependentPoles([
+            En("Rotor poles ≠ stator"),
+            PtBr("Polos do rotor ≠ estator")
+        ]),
+        RotorIndependentPolesHover([
+            En("Gives the rotor a pole count of its own. A real machine develops \
+                average torque only when the two counts match — with different \
+                counts the interaction torque pulsates and averages to zero over \
+                a turn. Showing that is the whole point of the demonstration."),
+            PtBr("Dá ao rotor um número de polos próprio. Uma máquina real só \
+                  produz torque médio quando os dois números coincidem — com \
+                  números diferentes o torque de interação pulsa e se anula ao \
+                  longo de uma volta. Mostrar isso é o objetivo da demonstração.")
+        ]),
+        RotorPoles([En("Rotor poles"), PtBr("Polos do rotor")]),
+        LoadAngle([En("Load angle (δ)"), PtBr("Ângulo de carga (δ)")]),
+        LoadAngleHover([
+            En("Forces the angle between the stator's flux axis and the rotor. \
+                Torque peaks a quarter of a well away from alignment; held past \
+                that the rotor cannot stay, and slips into the next stable \
+                position."),
+            PtBr("Força o ângulo entre o eixo de fluxo do estator e o rotor. O \
+                  torque é máximo a um quarto de poço do alinhamento; além disso \
+                  o rotor não se sustenta e escorrega para a próxima posição \
+                  estável.")
+        ]),
+        AlignmentTorque([En("Restoring torque"), PtBr("Torque restaurador")]),
+        AvailableTorque([En("Torque available"), PtBr("Torque disponível")]),
+        AvailableTorqueHover([
+            En("Swing of the rotor–field interaction over a full turn, against \
+                what the same rotor would feel with the stator's own pole \
+                count. It is the share of a working machine's grip that this \
+                pole combination actually keeps."),
+            PtBr("Variação da interação rotor–campo ao longo de uma volta, \
+                  comparada ao que o mesmo rotor sentiria com o número de polos \
+                  do próprio estator. É a fração da firmeza de uma máquina que \
+                  funciona que esta combinação de polos realmente mantém.")
+        ]),
+        StablePositions([En("Resting positions"), PtBr("Posições de repouso")]),
+        StablePositionsHover([
+            En("Measured, not assumed: the stator's field is sampled around the \
+                bore, the rotor's poles are laid over it, and every rotation \
+                where the net torque vanishes is counted. Matched pole counts \
+                give the familiar p."),
+            PtBr("Medidas, não supostas: o campo do estator é amostrado ao longo \
+                  do entreferro, os polos do rotor são sobrepostos a ele, e toda \
+                  rotação em que o torque líquido se anula é contada. Com polos \
+                  iguais dá o p de sempre.")
+        ]),
+        PastPullout([
+            En("Past pull-out — the rotor slips"),
+            PtBr("Além do torque máximo — o rotor escorrega")
+        ]),
+        WeakTorque([En("Torque reduced to"), PtBr("Torque reduzido a")]),
+        WeakTorqueHint([
+            En("The rotor still settles under the field — it just holds weakly. \
+                This is what a mismatched pole count costs: the two only meet on \
+                a shared harmonic, and the rotor keeps the fraction of its pull \
+                that harmonic carries."),
+            PtBr("O rotor continua se acomodando sob o campo — só que segura \
+                  fraco. É isto que polos diferentes custam: os dois só se \
+                  encontram num harmônico comum, e o rotor fica com a fração da \
+                  atração que esse harmônico carrega.")
+        ]),
+        NoPreferredPosition([
+            En("These two pole counts cancel exactly: every pole pulled one way \
+                is matched by one pulled the other, at every angle. Not weak \
+                torque — none, so the field holds the rotor nowhere and it stays \
+                where it is left."),
+            PtBr("Estes dois números de polos se cancelam exatamente: cada polo \
+                  puxado num sentido é compensado por outro no sentido oposto, \
+                  em qualquer ângulo. Não é torque fraco — é ausente, então o \
+                  campo não prende o rotor e ele fica onde for deixado.")
+        ]),
+
         ValidConfig([En("Valid configuration"), PtBr("Configuração válida")]),
         InvalidConfig([En("Invalid configuration"), PtBr("Configuração inválida")]),
         InvalidConfigHint([
