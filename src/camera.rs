@@ -1,5 +1,6 @@
 use bevy::input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
+use bevy_egui::input::EguiWantsInput;
 
 /// Orbit camera controller component.
 #[derive(Component)]
@@ -20,29 +21,37 @@ impl Default for OrbitCamera {
 }
 
 /// System: orbit the camera around the origin using mouse drag + scroll.
+///
+/// Input is handed to the panels first, through [`crate::ui::PointerOverPanel`]
+/// rather than `EguiWantsInput`. That is not a preference: a guard reading the
+/// resource left the camera zooming straight through the config panel, and the
+/// same question answered from `PanelSpace` fixed it. See that type for what
+/// was and was not established about why.
+///
+/// The events are drained rather than left unread. Skipping the system with a
+/// run condition would let them queue up while the pointer sat over a panel and
+/// then apply all at once the moment it left, snapping the camera.
 pub fn orbit_camera(
     mut query: Query<(&mut Transform, &mut OrbitCamera)>,
     mouse_button: Res<ButtonInput<MouseButton>>,
     mut mouse_motion: MessageReader<MouseMotion>,
     mut scroll: MessageReader<MouseWheel>,
-    mut contexts: bevy_egui::EguiContexts,
+    egui_input: Res<EguiWantsInput>,
+    over_panel: Res<crate::ui::PointerOverPanel>,
 ) {
-    let Ok((mut transform, mut orbit)) = query.single_mut() else {
-        return;
-    };
-
-    let mut egui_handled = false;
-    if let Ok(ctx) = contexts.ctx_mut()
-        && (ctx.egui_wants_pointer_input() || ctx.is_pointer_over_egui())
-    {
-        egui_handled = true;
-    }
-
-    if egui_handled {
+    // Two checks, because neither covers the other. `PointerOverPanel` is the
+    // one that catches the docked panels; `EguiWantsInput` covers what floats
+    // above them — the minimized button, tooltips, popups — and a drag that is
+    // already in progress.
+    if over_panel.0 || egui_input.wants_pointer_input() {
         mouse_motion.clear();
         scroll.clear();
         return;
     }
+
+    let Ok((mut transform, mut orbit)) = query.single_mut() else {
+        return;
+    };
 
     if mouse_button.pressed(MouseButton::Left) {
         for event in mouse_motion.read() {
