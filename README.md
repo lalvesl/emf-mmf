@@ -2,6 +2,8 @@
 
 **EMF-MMF** is a 3D interactive simulation for visualizing and configuring the coil winding schemas of electrical motors. The application renders a **3D cylindrical stator** with grooves (slots), through which conductive wires pass. Wires are connected to form polyphase electrical motor windings, allowing the user to experiment with different motor configurations in real time.
 
+**Try it in your browser:** <https://lalvesl.github.io/emf-mmf/>
+
 The project is inspired by classical stator winding diagrams — a circular cross-section of a stator showing numbered grooves with colored coil bundles routed through them, and the corresponding waveform representation of the winding pattern.
 
 ## Core Concept
@@ -156,4 +158,4 @@ They call `cargo` directly and do not need the Dioxus CLI:
 
 ## License
 
-This project is open-source. Please check the `LICENSE` file for more details.
+Released under the [MIT License](LICENSE).
